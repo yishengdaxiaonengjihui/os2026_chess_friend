@@ -1,0 +1,4 @@
+# ---- 可选依赖：长期记忆与向量库（第二阶段接入）----
+# 安装：pip install -r requirements-memory.txt
+mem0ai>=0.1.20
+chromadb>=0.4

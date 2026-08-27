@@ -20,5 +20,6 @@ npm-debug.log*
 *.db
 *.sqlite3
 *.log
+data/
 .DS_Store
 Thumbs.db
