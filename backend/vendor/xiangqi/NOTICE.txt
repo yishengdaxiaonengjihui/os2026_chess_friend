@@ -1,0 +1,11 @@
+# Vendored Third-Party Code
+
+## logic.js
+
+- **Source**: https://github.com/ryoi/xiangqi （Chinese Chess Web Game）
+- **Author**: ryoi（ryoibot@gmail.com）
+- **License**: MIT（与本源代码仓库 LICENSE 一致）
+- **Purpose**: 象棋规则、合法着法生成、α-β 剪枝 + 置换表 + 杀着/历史启发式 AI 引擎
+- **Modification**: 无 —— 原样内置（仅通过 Node 宿主脚本 engine_host.js 调用其 window.logic 接口）
+
+> 本项目不修改引擎内部逻辑，只通过 FEN <-> 棋盘转换对接。原始仓库可在线游玩：https://ryoi.github.io/xiangqi/

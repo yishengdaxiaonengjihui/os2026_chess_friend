@@ -30,7 +30,7 @@
 
 | 能力 | 说明 |
 | --- | --- |
-| 🎮 真实象棋博弈 | 复用 [ryoi/xiangqi](https://github.com/ryoi/xiangqi) 中国象棋引擎（α-β 剪枝、置换表、开局库、胜率评估） |
+| 🎮 真实象棋博弈 | 复用 [ryoi/xiangqi](https://github.com/ryoi/xiangqi) logic.js 引擎（α-β 剪枝、置换表、开局库、胜率评估），自研 FEN 对接适配层 |
 | 🧠 分层记忆 | 本局短期会话记忆 + Mem0 非结构化长期记忆 + SQLite 结构化用户画像，三者分工协作 |
 | 🎭 人格化陪伴 | 棋局事件（将军/吃子/胜负）驱动 LLM 生成人格台词、情绪、动作 |
 | 🗣️ 具身数字人 | 魔珐星云 XmovAvatar SDK：TTS、口型同步、情绪表情、关键动作、语音打断（barge-in） |
@@ -93,14 +93,18 @@ os2026_chess_friend/
 │   │   ├── config.py             # 环境变量配置（LLM / 魔珐星云 / 开关）
 │   │   ├── api/                  # REST + WS 接口层
 │   │   ├── core/                 # ★ 自研核心模块
-│   │   │   ├── chess_context_parser.py
+│   │   │   ├── chess_context_parser.py   # 棋局状态解析
+│   │   │   ├── chess_engine.py           # 象棋引擎适配层(node+logic.js)
+│   │   │   ├── js/engine_host.js         # Node 引擎宿主脚本
 │   │   │   ├── memory_manager.py
 │   │   │   ├── prompt_builder.py
 │   │   │   ├── llm_client.py
 │   │   │   └── avatar_dispatcher.py
 │   │   ├── models/               # Pydantic 数据模型
 │   │   └── db/                   # SQLite 访问层
+│   ├── vendor/xiangqi/           # vendored logic.js 引擎（MIT，含 NOTICE 归属）
 │   └── tests/                    # pytest 单测
+├── scripts/                      # 演示/运维脚本（demo_engine.py）
 ├── frontend/                     # 前端（复用 ryoi/xiangqi，开发中）
 ├── docker-compose.yml            # 一键部署
 ├── Dockerfile
@@ -148,6 +152,7 @@ docker compose up -d
 ### ✅ 本项目自研核心模块（重点开源贡献）
 
 - `chess_context_parser`：棋局状态解析，引擎原始输出 → 结构化博弈上下文
+- `chess_engine`：象棋引擎适配层（FEN <-> 棋盘转换、AI 应手、评估/胜率、将军/将死判定）
 - `memory_manager`：分层记忆适配器（短期 / Mem0 长期 / SQLite 结构化画像）
 - `prompt_builder`：五层 Prompt 组装器
 - `avatar_dispatcher`：具身指令分发器（表演队列、状态机、语音打断）
@@ -157,10 +162,12 @@ docker compose up -d
 
 | 仓库 | 复用内容 | 协议 |
 | --- | --- | --- |
-| [ryoi/xiangqi](https://github.com/ryoi/xiangqi) | 前端棋盘、logic.js 象棋引擎 | MIT |
+| [ryoi/xiangqi](https://github.com/ryoi/xiangqi) | 前端棋盘；`logic.js` 象棋引擎（α-β剪枝/置换表/开局库，vended 于 `backend/vendor/xiangqi`，含 NOTICE 归属） | MIT |
 | [mem0ai/mem0](https://github.com/mem0ai/mem0) | 长期记忆 SDK（仅嵌入，不起独立服务） | Apache-2.0 |
 | [chroma-core/chroma](https://github.com/chroma-core/chroma) | 嵌入式向量数据库（Mem0 底层存储） | Apache-2.0 |
 | FastAPI 官方 | Web 框架 | MIT |
+
+> vendored `logic.js` 原样内置（未修改引擎逻辑），仅通过自研 `engine_host.js` + `chess_engine.py` 粘合层以 FEN 对接，保证 Docker 构建可离线复现。
 
 ### 📖 参考借鉴（仅设计思路，未复制源码）
 
@@ -171,7 +178,7 @@ docker compose up -d
 
 ## 开发路线图
 
-- [ ] **第一阶段（基础打通）**：前端象棋 + FastAPI 联调；棋局解析模块；LLM 链路，基础台词输出
+- [x] **第一阶段（基础打通，引擎已接入）**：棋局解析模块、LLM 链路、基础台词输出 ✅；象棋引擎 AI 应手/评估/胜负判定 ✅；剩余：前端棋盘 + FastAPI 联调
 - [ ] **第二阶段（记忆画像）**：接入 mem0 + chroma；分层记忆；SQLite 结构化画像读写与 diff 更新
 - [ ] **第三阶段（数字人链路）**：`avatar_dispatcher`；对接魔珐星云 SDK；表演队列 + 语音打断 + 降级开关
 - [ ] **第四阶段（打磨交付）**：Prompt 调优、时序修复、Docker-Compose 可复现、演示录屏、PDF 文档

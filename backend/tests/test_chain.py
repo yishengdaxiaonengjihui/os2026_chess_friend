@@ -40,6 +40,11 @@ def test_move_chain():
     )
     assert r.status_code == 200
     body = r.json()
+    # 引擎 AI 应手
+    assert body["ai_move"]["from_sq"] and body["ai_move"]["to_sq"]
+    assert body["new_fen"] != new_fen
+    assert body["events"] == [] or any("AI 吃子" in e for e in body["events"])
+    # LLM + 数字人
     assert body["llm_output"]["speech_text"]
     assert body["avatar_command"]["action_tag"]
     assert body["long_term_memories"] == []

@@ -16,10 +16,10 @@ COLS = "abcdefghi"
 FILES = list(COLS)
 RANKS = list(range(10))
 
-# 棋子记号（UCCI 风格）：小写红、大写黑
+# 棋子记号：大写=红方(下)、小写=黑方(上)，与 ryoi/xiangqi 引擎约定一致
 PIECE_NAMES = {
-    "k": "帅", "a": "仕", "b": "相", "n": "马", "r": "车", "c": "炮", "p": "兵",
-    "K": "将", "A": "士", "B": "象", "N": "马", "R": "车", "C": "炮", "P": "卒",
+    "K": "帅", "A": "仕", "B": "相", "N": "马", "R": "车", "C": "炮", "P": "兵",  # 红方
+    "k": "将", "a": "士", "b": "象", "n": "马", "r": "车", "c": "炮", "p": "卒",  # 黑方
 }
 
 
@@ -165,9 +165,9 @@ def build_context(
 
 
 def material_text(material: dict[str, int]) -> str:
-    """子力统计 -> 可读文本（供大模型理解局面）。"""
-    red = [f"{PIECE_NAMES[p]}{n}" for p, n in sorted(material.items()) if p.islower()]
-    black = [f"{PIECE_NAMES[p]}{n}" for p, n in sorted(material.items()) if p.isupper()]
+    """子力统计 -> 可读文本（供大模型理解局面）。大写=红方、小写=黑方。"""
+    red = [f"{PIECE_NAMES[p]}{n}" for p, n in sorted(material.items()) if p.isupper()]
+    black = [f"{PIECE_NAMES[p]}{n}" for p, n in sorted(material.items()) if p.islower()]
     return f"红方: {'、'.join(red) or '无'}; 黑方: {'、'.join(black) or '无'}"
 
 

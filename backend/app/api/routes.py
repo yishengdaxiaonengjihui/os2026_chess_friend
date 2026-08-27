@@ -20,6 +20,7 @@ from ..core import (
     detect_move,
     make_default_fen,
 )
+from ..core.chess_engine import ai_move
 from ..db.database import append_move_record, init_db, save_game_record
 from ..models.schemas import (
     InterruptRequest,
@@ -90,26 +91,43 @@ def make_move(req: MoveRequest) -> MoveResponse:
 
     # 1) 棋局状态解析：还原用户这手棋（结构化）
     user_move = detect_move(sess["fen"], req.fen)
-    sess["prev_fen"] = sess["fen"]
-    sess["fen"] = req.fen
     sess["move_index"] += 1
 
-    # 2) 棋局事件（第一阶段：吃子/将军粗判；接入引擎后丰富）
+    # 2) 引擎 AI 应手（用户执红 -> AI 执黑）
+    engine_res = ai_move(req.fen, color="black", move_number=sess["move_index"])
+    ai_new_fen = engine_res["new_fen"]
+    ai_move_obj = detect_move(req.fen, ai_new_fen) if engine_res["from_sq"] else None
+
+    # 3) 棋局事件（吃子 / 将军 / 将死 / 困毙）
     events: list[str] = []
     if user_move.captured:
-        events.append(f"吃子：吃掉对方{user_move.captured}")
+        events.append(f"玩家吃子：吃掉对方{user_move.captured}")
+    if ai_move_obj and ai_move_obj.captured:
+        events.append(f"AI 吃子：吃掉玩家{ai_move_obj.captured}")
+    if engine_res.get("opponent_in_check"):
+        events.append("将军：玩家被将军！")
+    if engine_res.get("opponent_checkmate"):
+        events.append("将死：玩家被将死，AI 获胜")
+    elif engine_res.get("opponent_stalemate"):
+        events.append("困毙：玩家无棋可走")
+
+    # 4) 标准化博弈上下文（用户视角胜率）
+    user_win_prob = round(1 - engine_res["win_probability"], 4) if engine_res["win_probability"] is not None else None
     ctx = build_context(
         user_move=user_move,
-        ai_move=None,  # 第一阶段暂未接入引擎，AI 应手在下一阶段实现
-        fen=req.fen,
+        ai_move=ai_move_obj,
+        fen=ai_new_fen,
+        win_probability=user_win_prob,
         events=events,
     )
+    sess["prev_fen"] = sess["fen"]
+    sess["fen"] = ai_new_fen
 
-    # 3) 分层记忆召回
+    # 5) 分层记忆召回
     sess["memory"].remember_turn("user", f"玩家走 {user_move.to_dict()}")
     recall = sess["memory"].recall(query=f"用户第{sess['move_index']}手棋 {user_move.piece}")
 
-    # 4) 五层 Prompt -> LLM（强约束 JSON）
+    # 6) 五层 Prompt -> LLM（强约束 JSON）
     messages = build_prompt(
         profile=recall["profile"],
         long_term_memories=recall["long_term"],
@@ -119,7 +137,7 @@ def make_move(req: MoveRequest) -> MoveResponse:
     llm_out = _llm.chat(messages)
     sess["memory"].remember_turn("assistant", llm_out["speech_text"])
 
-    # 5) 具身指令分发
+    # 7) 具身指令分发
     cmd = PerformanceCommand(
         speech_text=llm_out["speech_text"],
         emotion_tag=llm_out["emotion_tag"],
@@ -127,13 +145,13 @@ def make_move(req: MoveRequest) -> MoveResponse:
     )
     avatar_cmd = sess["dispatcher"].play_sync(cmd)
 
-    # 6) 落盘棋谱
-    append_move_record(sess["game_id"], sess["move_index"], user_move.to_dict(), None, req.fen, events)
+    # 8) 落盘棋谱
+    append_move_record(sess["game_id"], sess["move_index"], user_move.to_dict(), engine_res, ai_new_fen, events)
 
     return MoveResponse(
         game_id=sess["game_id"],
-        ai_move={"pending": True},
-        new_fen=req.fen,
+        ai_move=engine_res,
+        new_fen=ai_new_fen,
         events=events,
         llm_output=LLMOutput(**llm_out),
         avatar_command=avatar_cmd,
