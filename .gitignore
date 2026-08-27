@@ -1,0 +1,24 @@
+# ---- 环境变量 / 密钥：绝不入库 ----
+.env
+.env.*
+!.env.example
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+dist/
+build/
+
+# ---- Node ----
+node_modules/
+npm-debug.log*
+
+# ---- 数据库 / 本地产物 ----
+*.db
+*.sqlite3
+*.log
+.DS_Store
+Thumbs.db
