@@ -24,6 +24,15 @@ def test_apply_move_and_detect_no_capture():
     assert mv.captured is None
 
 
+def test_move_piece_name_attribute():
+    """回归：Move 对象需可直接访问 piece_name（曾因缺少该属性导致吃子落子 500）。"""
+    mv = ccp.Move(from_sq="e7", to_sq="e3", piece="C", captured="p")
+    assert mv.piece_name == "炮"
+    assert mv.to_dict()["piece_name"] == "炮"
+    assert mv.to_dict()["captured_name"] == "卒"
+    assert ccp.Move("a6", "a5", "P").piece_name == "兵"
+
+
 def test_detect_capture():
     # 红兵 a6 吃黑兵 b5
     prev = "rnbakabnr/9/1c5c1/p1p1p1p1p/1p7/P9/9/1C5C1/9/RNBAKABNR w - - 0 1"

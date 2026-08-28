@@ -31,6 +31,16 @@ class Move:
     piece: str
     captured: Optional[str] = None
 
+    @property
+    def piece_name(self) -> str:
+        """棋子中文名（如 '马'），与 to_dict() 一致，供直接属性访问。"""
+        return PIECE_NAMES.get(self.piece, self.piece)
+
+    @property
+    def captured_name(self) -> str:
+        """被吃棋子中文名（如 '卒'），无吃子时为空串。"""
+        return PIECE_NAMES.get(self.captured, self.captured) if self.captured else ""
+
     def to_dict(self) -> dict:
         d = {
             "from": self.from_sq,

@@ -152,9 +152,9 @@ def make_move(req: MoveRequest) -> MoveResponse:
     # 4) 棋局事件（吃子 / 将军 / 将死 / 困毙）
     events: list[str] = []
     if user_move.captured:
-        events.append(f"玩家吃子：吃掉对方{user_move.captured}")
+        events.append(f"玩家吃子：吃掉对方{user_move.captured_name}")
     if ai_move_obj and ai_move_obj.captured:
-        events.append(f"AI 吃子：吃掉玩家{ai_move_obj.captured}")
+        events.append(f"AI 吃子：吃掉玩家{ai_move_obj.captured_name}")
     if engine_res.get("opponent_in_check"):
         events.append("将军：玩家被将军！")
     if engine_res.get("opponent_checkmate"):
@@ -201,13 +201,13 @@ def make_move(req: MoveRequest) -> MoveResponse:
         # 本局首次吃子：写一条长期记忆，让「长期记忆」面板在对局中就开始填充
         sess["capture_noted"] = True
         sess["memory"].long_term.add(
-            f"用户在第{sess['move_index']}手用{user_move.piece_name}吃掉对方{user_move.captured}，吃子主动、敢于交换。",
+            f"用户在第{sess['move_index']}手用{user_move.piece_name}吃掉对方{user_move.captured_name}，吃子主动、敢于交换。",
             metadata={"type": "capture", "game_id": sess["game_id"]},
         )
 
     # 8) 分层记忆召回
     sess["memory"].remember_turn("user", f"玩家走 {user_move.to_dict()}")
-    recall = sess["memory"].recall(query=f"用户第{sess['move_index']}手棋 {user_move.piece}")
+    recall = sess["memory"].recall(query=f"第{sess['move_index']}手 用户 吃子 {user_move.piece_name}")
 
     # 9) 画像 diff 更新（棋风/棋力/开局 + 统计）
     diff = style_strength_diff(stats)
