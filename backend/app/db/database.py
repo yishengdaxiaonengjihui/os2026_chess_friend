@@ -109,3 +109,16 @@ def append_move_record(game_id: str, move_index: int, user_move, ai_move, fen: s
         conn.commit()
     finally:
         conn.close()
+
+
+def finish_game_record(game_id: str, result: str, final_fen: str) -> None:
+    """对局结束：写入结果与终局 FEN。result: 'win'|'lose'|'draw'（用户视角）。"""
+    conn = get_conn()
+    try:
+        conn.execute(
+            "UPDATE games SET result=?, final_fen=?, finished_at=? WHERE game_id=?",
+            (result, final_fen, datetime.now().isoformat(timespec="seconds"), game_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()

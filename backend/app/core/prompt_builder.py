@@ -34,7 +34,25 @@ SYSTEM_ROLE = (
 def _profile_to_text(profile: dict[str, Any]) -> str:
     if not profile:
         return "（暂无画像数据）"
-    return "\n".join(f"- {k}: {v}" for k, v in profile.items() if v)
+    lines = []
+    stats = profile.get("stats")
+    for k, v in profile.items():
+        if not v:
+            continue
+        if k == "stats":
+            lines.append("- 历史战绩: " + _stats_to_text(stats))
+        else:
+            lines.append(f"- {k}: {v}")
+    return "\n".join(lines) or "（暂无画像数据）"
+
+
+def _stats_to_text(stats: dict) -> str:
+    if not stats:
+        return "（暂无对局记录）"
+    return (
+        f"共{stats.get('games', 0)}局，胜{stats.get('wins', 0)}负{stats.get('losses', 0)}"
+        f"平{stats.get('draws', 0)}，累计{stats.get('moves', 0)}手，吃子{stats.get('user_captures', 0)}枚"
+    )
 
 
 def _board_to_text(ctx: dict[str, Any]) -> str:

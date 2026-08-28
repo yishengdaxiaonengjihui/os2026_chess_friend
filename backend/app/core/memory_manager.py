@@ -109,8 +109,8 @@ class LongTermMemory:
         if self._mem0 is not None:
             results = self._mem0.search(query, user_id=self.user_id, limit=top_k)
             return [str(r.get("memory", r)) for r in results]
-        # 降级：按关键词重叠度召回
-        qwords = set(query.replace("。", " ").replace("，", " ").split())
+        # 降级：按查询词子串匹配召回（中文无需分词，子串命中即计分）
+        qterms = [t for t in query.replace("。", " ").replace("，", " ").split() if t]
         with self._conn() as c:
             rows = c.execute(
                 "SELECT content FROM long_term_memories WHERE user_id=? ORDER BY id DESC",
@@ -118,10 +118,13 @@ class LongTermMemory:
             ).fetchall()
         scored = []
         for (content,) in rows:
-            cwords = set(str(content).split())
-            score = len(qwords & cwords)
-            if score > 0 or not qwords:
-                scored.append((score, content))
+            text = str(content)
+            if not qterms:
+                scored.append((0, text))
+                continue
+            score = sum(1 for t in qterms if t in text)
+            if score > 0:
+                scored.append((score, text))
         scored.sort(key=lambda x: -x[0])
         return [c for _, c in scored[:top_k]]
 

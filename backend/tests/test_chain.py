@@ -79,6 +79,44 @@ def test_illegal_move_rejected():
     assert r.status_code == 400
 
 
+def test_move_updates_profile_stats():
+    from backend.app.api import routes
+
+    g = client.post("/api/games", json={"user_id": "u-stats"}).json()
+    legal = client.get("/api/moves/legal", params={"fen": g["fen"], "color": "red"}).json()
+    mv = legal["moves"][0]
+    r = client.post(
+        "/api/moves",
+        json={"game_id": g["game_id"], "user_id": "u-stats", "from_sq": mv["from"], "to_sq": mv["to"]},
+    )
+    assert r.status_code == 200
+    stats = r.json()["profile"]["stats"]
+    assert stats["moves"] == 1
+    assert stats["games"] == 0  # 未结束
+    assert "first_move" in stats
+    # 画像已持久化且开局已识别
+    p = client.get("/api/profiles/u-stats").json()["profile"]
+    assert p["opening"] in ("中炮开局", "边炮开局", "仙人指路", "屏风马开局", "飞相局", "补士局", "直车开局", "常规开局")
+    # 清理该测试用户，避免污染后续测试
+    routes._sessions.pop(g["game_id"], None)
+
+
+def test_game_over_blocks_moves():
+    from backend.app.api import routes
+
+    g = client.post("/api/games", json={"user_id": "u-over"}).json()
+    # 人为标记本局结束 -> 再落子应 400
+    routes._sessions[g["game_id"]]["game_over"] = True
+    legal = client.get("/api/moves/legal", params={"fen": g["fen"], "color": "red"}).json()
+    mv = legal["moves"][0]
+    r = client.post(
+        "/api/moves",
+        json={"game_id": g["game_id"], "user_id": "u-over", "from_sq": mv["from"], "to_sq": mv["to"]},
+    )
+    assert r.status_code == 400
+    routes._sessions.pop(g["game_id"], None)
+
+
 def test_profile_endpoint():
     r = client.get("/api/profiles/u-test-3")
     assert r.status_code == 200

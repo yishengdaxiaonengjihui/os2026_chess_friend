@@ -115,6 +115,12 @@
       d.innerHTML = "<b>" + k + "：</b>" + v;
       el.profile.appendChild(d);
     }
+    if (profile.stats && profile.stats.games > 0) {
+      const s = profile.stats;
+      const d = document.createElement("div");
+      d.innerHTML = "<b>历史战绩：</b>共" + s.games + "局 · 胜" + s.wins + "负" + s.losses + "平" + s.draws + " · 吃子" + s.user_captures + "枚";
+      el.profile.appendChild(d);
+    }
   }
 
   function renderMemories(list) {
