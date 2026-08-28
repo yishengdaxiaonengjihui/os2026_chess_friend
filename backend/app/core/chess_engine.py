@@ -74,6 +74,12 @@ def ping() -> bool:
     return bool(_run("ping", {}).get("pong"))
 
 
+def legal_moves(fen: str, color: str = "red") -> list[dict[str, str]]:
+    """返回某方全部合法着法：[{from, to}, ...]。"""
+    res = _run("legal_moves", {"fen": fen, "color": color})
+    return res.get("moves", [])
+
+
 def position_status(fen: str, color: str = "red") -> dict[str, Any]:
     """局面状态：将军 / 将死 / 困毙 / 合法着法数 / 评估分。"""
     return _run("position", {"fen": fen, "color": color})

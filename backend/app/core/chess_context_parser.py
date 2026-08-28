@@ -204,6 +204,14 @@ def apply_move_to_fen(fen: str, from_sq: str, to_sq: str) -> str:
     return " ".join(parts)
 
 
+def toggle_side(fen: str) -> str:
+    """切换 FEN 的行棋方字段（w<->b）。"""
+    parts = fen.split(" ")
+    if len(parts) >= 2:
+        parts[1] = "b" if parts[1] == "w" else "w"
+    return " ".join(parts)
+
+
 def make_default_fen() -> str:
     """初始局面 FEN（黑方视角，红先）。"""
     return "rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1"

@@ -113,6 +113,20 @@ try {
       legal_move_count: countLegalMoves(board, color),
       evaluate: logic.evaluateBoard(board, color),
     });
+  } else if (input.action === "legal_moves") {
+    const board = boardFromFen(input.fen);
+    const color = input.color === "black" ? "black" : "red";
+    const moves = [];
+    for (let r = 0; r < 10; r++) {
+      for (let c = 0; c < 9; c++) {
+        const p = board[r][c];
+        if (p && p.c === color) {
+          const list = logic.getLegalMovesFiltered(board, r, c);
+          for (const t of list) moves.push({ from: sqOf([r, c]), to: sqOf(t) });
+        }
+      }
+    }
+    respond({ ok: true, moves: moves });
   } else if (input.action === "ai_move") {
     const board = boardFromFen(input.fen);
     const color = input.color === "black" ? "black" : "red";

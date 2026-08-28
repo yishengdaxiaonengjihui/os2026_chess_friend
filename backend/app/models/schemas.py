@@ -22,10 +22,15 @@ class NewGameResponse(BaseModel):
 class MoveRequest(BaseModel):
     game_id: str
     user_id: str
-    fen: str
     from_sq: str
     to_sq: str
     thinking_text: Optional[str] = None
+
+
+class LegalMovesResponse(BaseModel):
+    moves: list[dict[str, str]]
+    color: str
+    fen: str
 
 
 class LLMOutput(BaseModel):
@@ -36,6 +41,7 @@ class LLMOutput(BaseModel):
 
 class MoveResponse(BaseModel):
     game_id: str
+    user_move: dict[str, Any]
     ai_move: dict[str, Any]
     new_fen: str
     events: list[str]

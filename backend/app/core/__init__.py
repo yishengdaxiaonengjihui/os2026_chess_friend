@@ -8,8 +8,14 @@ from . import (
     prompt_builder,
 )
 from .avatar_dispatcher import AvatarDispatcher, AvatarState, PerformanceCommand
-from .chess_context_parser import build_context, detect_move, make_default_fen
-from .chess_engine import EngineError, ai_move, ping, position_status, score_to_win_prob
+from .chess_context_parser import (
+    apply_move_to_fen,
+    build_context,
+    detect_move,
+    make_default_fen,
+    toggle_side,
+)
+from .chess_engine import EngineError, ai_move, legal_moves, ping, position_status, score_to_win_prob
 from .llm_client import LLMClient
 from .memory_manager import LongTermMemory, MemoryManager, ProfileStore, ShortTermMemory
 from .prompt_builder import build_prompt
@@ -20,12 +26,15 @@ __all__ = [
     "PerformanceCommand",
     "EngineError",
     "ai_move",
+    "legal_moves",
     "ping",
     "position_status",
     "score_to_win_prob",
+    "apply_move_to_fen",
     "build_context",
     "detect_move",
     "make_default_fen",
+    "toggle_side",
     "LLMClient",
     "LongTermMemory",
     "MemoryManager",

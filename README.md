@@ -68,12 +68,13 @@
 
 ### 关键链路（用户落子）
 
-1. 前端落子 → WebSocket 推送落子事件 + FEN
-2. 后端执行象棋引擎 → AI 落子、评估分数、棋局事件
-3. `chess_context_parser` 将原始引擎输出转为结构化博弈上下文 JSON
-4. `memory_manager`：本局记忆写入 + Mem0 召回 top-4 长期记忆 + 读取 SQLite 画像
-5. `prompt_builder` 拼装五层 Prompt → `llm_client` 强约束输出 `{speech_text, emotion_tag, action_tag}`
-6. `avatar_dispatcher`：AI 落子回传棋盘 + 异步驱动数字人表演队列，支持语音打断
+1. 前端棋盘点击（自研 vanilla JS，零依赖离线可跑）→ 高亮合法着法 `GET /api/moves/legal`
+2. 前端提交 `{game_id, from_sq, to_sq}` → `POST /api/moves`，后端用引擎校验合法性（非法着法 400）
+3. 后端执行象棋引擎 → AI 落子、评估分数、胜率、棋局事件；`user_fen`/`new_fen` 由后端统一计算
+4. `chess_context_parser` 将原始引擎输出转为结构化博弈上下文 JSON
+5. `memory_manager`：本局记忆写入 + Mem0 召回 top-4 长期记忆 + 读取 SQLite 画像
+6. `prompt_builder` 拼装五层 Prompt → `llm_client` 强约束输出 `{speech_text, emotion_tag, action_tag}`
+7. `avatar_dispatcher`：AI 落子回传棋盘 + 异步驱动数字人表演队列，支持语音打断
 
 ### Prompt 五层结构
 
@@ -105,7 +106,7 @@ os2026_chess_friend/
 │   ├── vendor/xiangqi/           # vendored logic.js 引擎（MIT，含 NOTICE 归属）
 │   └── tests/                    # pytest 单测
 ├── scripts/                      # 演示/运维脚本（demo_engine.py）
-├── frontend/                     # 前端（复用 ryoi/xiangqi，开发中）
+├── frontend/                     # 自研 vanilla JS 前端（棋盘/棋友面板，联调完成）
 ├── docker-compose.yml            # 一键部署
 ├── Dockerfile
 ├── requirements.txt
@@ -125,6 +126,8 @@ cp .env.example .env              # 按需填入 LLM / 魔珐星云密钥
 uvicorn backend.app.main:app --reload
 ```
 
+启动后直接访问 <http://127.0.0.1:8000/> 即为棋盘页面（API 与页面同源同端口）；交互式 API 文档在 <http://127.0.0.1:8000/docs>。
+
 ### 方式二：Docker Compose
 
 ```bash
@@ -140,7 +143,7 @@ docker compose up -d
 
 | 变量 | 说明 |
 | --- | --- |
-| `LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL` | 大模型（OpenAI 兼容协议，可换 GLM/Qwen 等） |
+| `LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL` | 大模型（OpenAI 兼容协议）。默认火山方舟 `doubao-seed-2.0-mini`（`LLM_THINKING_OFF=1` 关闭思考模式），可换 GLM/Qwen 等 |
 | `XMOV_APP_ID` / `XMOV_APP_SECRET` | 魔珐星云 SDK 鉴权（真机联调启用） |
 | `XMOV_LAOZHANG_*` / `XMOV_XIAOYA_*` | 星云形象/音色资产 ID |
 | `ENABLE_DIGITAL_HUMAN` | 数字人模块总开关，默认 `true` |
@@ -178,7 +181,7 @@ docker compose up -d
 
 ## 开发路线图
 
-- [x] **第一阶段（基础打通，引擎已接入）**：棋局解析模块、LLM 链路、基础台词输出 ✅；象棋引擎 AI 应手/评估/胜负判定 ✅；剩余：前端棋盘 + FastAPI 联调
+- [x] **第一阶段（基础打通，引擎已接入）**：棋局解析模块、LLM 链路、基础台词输出 ✅；象棋引擎 AI 应手/评估/胜负判定 ✅；**前端棋盘 + FastAPI 联调 ✅（自研 vanilla JS 前端，同源服务）**
 - [ ] **第二阶段（记忆画像）**：接入 mem0 + chroma；分层记忆；SQLite 结构化画像读写与 diff 更新
 - [ ] **第三阶段（数字人链路）**：`avatar_dispatcher`；对接魔珐星云 SDK；表演队列 + 语音打断 + 降级开关
 - [ ] **第四阶段（打磨交付）**：Prompt 调优、时序修复、Docker-Compose 可复现、演示录屏、PDF 文档

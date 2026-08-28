@@ -15,10 +15,10 @@ class Settings(BaseSettings):
         case_sensitive=False,
     )
 
-    # ---- LLM（OpenAI 兼容协议）----
+    # ---- LLM（OpenAI 兼容协议，默认火山方舟 Ark）----
     llm_api_key: str = ""
-    llm_base_url: str = "https://integrate.api.nvidia.com/v1"
-    llm_model: str = "nvidia/nemotron-3.5-lightning-30b-a3b"
+    llm_base_url: str = "https://ark.cn-beijing.volces.com/api/plan/v3"
+    llm_model: str = "doubao-seed-2.0-mini"
     llm_thinking_off: bool = False
     llm_max_tokens: int = 320
     llm_temperature: float = 0.9
