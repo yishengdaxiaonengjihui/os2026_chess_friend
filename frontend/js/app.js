@@ -18,6 +18,7 @@
     events: document.getElementById("events"),
     profile: document.getElementById("profile"),
     memories: document.getElementById("memories"),
+    aiThinking: document.getElementById("ai-thinking"),
   };
 
   const AVATARS = { laozhang: ["🧓", "老张"], xiaoya: ["👩", "小雅"] };
@@ -225,6 +226,7 @@
     state.board.movePiece(fromSq, toSq, optimistic);
     legalCache = {};
     setStatus("你已落子，AI 思考中…");
+    el.aiThinking.classList.remove("hidden");
     try {
       const resp = await API.makeMove(state.game.game_id, state.game.user_id, fromSq, toSq);
       state.fen = resp.new_fen;
@@ -260,6 +262,7 @@
     } finally {
       state.busy = false;
       state.board.setBusy(false);
+      el.aiThinking.classList.add("hidden");
       state.selected = null;
       state.targets = [];
       state.board.clearTargets();

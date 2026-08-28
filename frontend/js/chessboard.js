@@ -102,14 +102,6 @@
         c.setAttribute("r", sw * 1.1); c.setAttribute("fill", stroke);
         svg.appendChild(c);
       }
-      // 楚河汉界
-      const txt = document.createElementNS("http://www.w3.org/2000/svg", "text");
-      txt.setAttribute("x", L.padX + 4 * L.stepX); txt.setAttribute("y", L.padY + 4.5 * L.stepY);
-      txt.setAttribute("text-anchor", "middle"); txt.setAttribute("fill", "#7a5230");
-      txt.setAttribute("font-size", L.stepX * 0.7);
-      txt.setAttribute("font-family", "KaiTi, STKaiti, serif");
-      txt.textContent = "楚 河 · 汉 界";
-      svg.appendChild(txt);
     }
 
     setFen(fen) {

@@ -128,4 +128,33 @@ body {
 .panel-section .muted, .muted { color: #9aa0a6; }
 #profile { font-size: 15px; line-height: 1.6; }
 
-.busy { opacity: .55; pointer-events: none; }
+.busy { pointer-events: none; }
+
+.thinking-pill {
+  position: absolute;
+  top: 3%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(255,255,255,.94);
+  color: #1f5b8b;
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 16px;
+  font-weight: 700;
+  z-index: 6;
+  box-shadow: 0 2px 8px rgba(0,0,0,.22);
+  pointer-events: none;
+  white-space: nowrap;
+}
+.thinking-pill.hidden { display: none; }
+.pill-dots::after {
+  content: "";
+  animation: pill-blink 1.2s steps(4, end) infinite;
+}
+@keyframes pill-blink {
+  0%   { content: ""; }
+  25%  { content: "."; }
+  50%  { content: ".."; }
+  75%  { content: "..."; }
+  100% { content: ""; }
+}
