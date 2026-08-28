@@ -31,6 +31,8 @@
     targets: [],
   };
 
+  let legalCache = {}; // key: fen|color -> moves[]（同一局面重复选子不再请求后端）
+
   function userId() {
     let id = localStorage.getItem("cf_user_id");
     if (!id) {
@@ -55,6 +57,37 @@
     return null;
   }
   function isRed(ch) { return !!ch && ch === ch.toUpperCase(); }
+
+  // ---- 本地乐观落子用的 FEN 工具（仅用于即时渲染，权威 FEN 以后端为准）----
+  function expandRow(row) {
+    const out = [];
+    for (const ch of row) {
+      if (/[0-9]/.test(ch)) { for (let i = 0; i < +ch; i++) out.push(null); }
+      else out.push(ch);
+    }
+    return out;
+  }
+  function compressRow(arr) {
+    let s = "", run = 0;
+    for (const c of arr) {
+      if (!c) run++;
+      else { if (run) { s += run; run = 0; } s += c; }
+    }
+    if (run) s += run;
+    return s;
+  }
+  function applyLocalMove(fen, fromSq, toSq) {
+    const parts = fen.split(" ");
+    const ranks = parts[0].split("/").map(expandRow);
+    const ff = fromSq.charCodeAt(0) - 97, fr = +fromSq[1];
+    const tf = toSq.charCodeAt(0) - 97, tr = +toSq[1];
+    const piece = ranks[fr][ff];
+    ranks[tr][tf] = piece;
+    ranks[fr][ff] = null;
+    parts[0] = ranks.map(compressRow).join("/");
+    parts[1] = parts[1] === "w" ? "b" : "w";
+    return parts.join(" ");
+  }
 
   function setStatus(t) { el.status.textContent = t; }
 
@@ -129,6 +162,7 @@
       state.fen = game.fen;
       state.selected = null;
       state.targets = [];
+      legalCache = {};
       state.board.clearSelection();
       state.board.setFen(game.fen);
       setStatus("该你走棋（红方）");
@@ -153,9 +187,15 @@
     state.selected = { file, rank };
     state.board.select(file, rank);
     try {
-      const res = await API.legalMoves(state.fen, "red");
+      const key = state.fen + "|red";
+      let moves = legalCache[key];
+      if (!moves) {
+        const res = await API.legalMoves(state.fen, "red");
+        moves = res.moves;
+        legalCache[key] = moves;
+      }
       const targets = [];
-      for (const m of res.moves) {
+      for (const m of moves) {
         if (m.from !== fileToSq(file, rank)) continue;
         const tf = FILES.indexOf(m.to[0]);
         const tr = parseInt(m.to[1], 10);
@@ -171,10 +211,15 @@
   async function makeMove(file, rank) {
     state.busy = true;
     state.board.setBusy(true);
-    setStatus("AI 思考中…");
+    const fromSq = fileToSq(state.selected.file, state.selected.rank);
+    const toSq = fileToSq(file, rank);
+    // 乐观落子：先本地渲染你的着法（滑动动画），不等后端
+    const optimistic = applyLocalMove(state.fen, fromSq, toSq);
+    state.fen = optimistic;
+    state.board.movePiece(fromSq, toSq, optimistic);
+    legalCache = {};
+    setStatus("你已落子，AI 思考中…");
     try {
-      const fromSq = fileToSq(state.selected.file, state.selected.rank);
-      const toSq = fileToSq(file, rank);
       const resp = await API.makeMove(state.game.game_id, state.game.user_id, fromSq, toSq);
       state.fen = resp.new_fen;
       state.board.setFen(resp.new_fen);

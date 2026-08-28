@@ -126,7 +126,9 @@
         p.textContent = PIECE_CHARS[cells[i]] || cells[i];
         p.style.left = this._x(file) + "px";
         p.style.top = this._y(rank) + "px";
-        p.style.width = p.style.height = Math.min(this._layout.stepX, this._layout.stepY) * 0.9 + "px";
+        p.dataset.file = file;
+        p.dataset.rank = rank;
+        p.style.width = p.style.height = Math.min(this._layout.stepX, this._layout.stepY) * 0.82 + "px";
         if (this.selected && this.selected.file === file && this.selected.rank === rank) p.classList.add("selected");
         if (this.aiFrom && this.aiFrom[0] === file && this.aiFrom[1] === rank) p.classList.add("ai-last");
         if (this.aiTo && this.aiTo[0] === file && this.aiTo[1] === rank) p.classList.add("ai-last");
@@ -179,6 +181,30 @@
       this.aiFrom = [FILES.indexOf(fromSq[0]), parseInt(fromSq[1], 10)];
       this.aiTo = [FILES.indexOf(toSq[0]), parseInt(toSq[1], 10)];
       this.setFen(this.fen);
+    }
+
+    movePiece(fromSq, toSq, fen) {
+      // 乐观落子：立即把棋子滑到目标格（不等待后端），吃子则移除目标格棋子
+      const ff = FILES.indexOf(fromSq[0]);
+      const fr = parseInt(fromSq[1], 10);
+      const tf = FILES.indexOf(toSq[0]);
+      const tr = parseInt(toSq[1], 10);
+      const L = this._layout;
+      if (!L) { this.fen = fen; return; }
+      let mover = null;
+      for (const p of Array.from(this.layer.querySelectorAll(".piece"))) {
+        const f = parseInt(p.dataset.file, 10);
+        const r = parseInt(p.dataset.rank, 10);
+        if (f === ff && r === fr) { mover = p; }
+        else if (f === tf && r === tr) { p.remove(); } // 吃子
+      }
+      if (!mover) { this.fen = fen; return; }
+      mover.dataset.file = tf;
+      mover.dataset.rank = tr;
+      mover.classList.remove("selected");
+      mover.style.left = this._x(tf) + "px";
+      mover.style.top = this._y(tr) + "px";
+      this.fen = fen;
     }
 
     setBusy(busy) {
