@@ -8,12 +8,15 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+import asyncio
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from .api.routes import router
 from .config import get_settings
+from .core import ws_hub
 from .db.database import init_db
 
 SETTINGS = get_settings()
@@ -23,6 +26,7 @@ FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend"
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
+    ws_hub.set_loop(asyncio.get_running_loop())  # 供同步代码调度 WS 协程
     yield
 
 
@@ -53,20 +57,33 @@ def info() -> dict:
         "health": "/health",
         "llm_mode": "mock" if SETTINGS.llm_configured is False else "real",
         "digital_human_enabled": SETTINGS.enable_digital_human,
+        "xmov": {
+            "app_id": SETTINGS.xmov_app_id,
+            "app_secret": SETTINGS.xmov_app_secret,
+            "gateway": SETTINGS.xmov_ws_url,
+            "configured": SETTINGS.xmov_configured,
+            "avatars": {
+                "laozhang": {"avatar": SETTINGS.xmov_laozhang_avatar, "voice": SETTINGS.xmov_laozhang_voice},
+                "xiaoya": {"avatar": SETTINGS.xmov_xiaoya_avatar, "voice": SETTINGS.xmov_xiaoya_voice},
+            },
+        },
     }
 
 
 @app.websocket("/ws/game/{game_id}")
 async def ws_game(ws: WebSocket, game_id: str):
-    """对局 WebSocket：接收前端事件，回推数字人指令 / 棋局事件（脚手架）。"""
+    """对局 WebSocket：接收前端事件，向该对局推送数字人状态 / 棋局事件。"""
     await ws.accept()
+    ws_hub.register(game_id, ws)
     try:
         await ws.send_json({"game_id": game_id, "type": "connected"})
         while True:
             data = await ws.receive_text()
-            await ws.send_json({"game_id": game_id, "type": "event", "payload": data})
+            await ws.send_json({"game_id": game_id, "type": "echo", "payload": data})
     except WebSocketDisconnect:
         return
+    finally:
+        ws_hub.unregister(game_id, ws)
 
 
 # 静态前端（最后挂载，/api /health 等路由优先）

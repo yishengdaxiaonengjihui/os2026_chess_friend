@@ -22,6 +22,7 @@ from ..core import (
     detect_move,
     make_default_fen,
     toggle_side,
+    ws_hub,
 )
 from ..core.chess_engine import ai_move, legal_moves, position_status
 from ..core.game_stats import (
@@ -76,6 +77,10 @@ def _new_session(user_id: str, personality: str) -> dict:
         "memory": memory,
         "dispatcher": AvatarDispatcher(),
     }
+    # 数字人状态广播 -> 对局 WS 连接
+    sess["dispatcher"].set_broadcaster(
+        lambda state, cmd: ws_hub.broadcast_avatar_state(sess["game_id"], state, cmd)
+    )
     _sessions[game_id] = sess
     return sess
 
@@ -227,8 +232,11 @@ def make_move(req: MoveRequest) -> MoveResponse:
     )
     avatar_cmd = sess["dispatcher"].play_sync(cmd)
 
-    # 12) 落盘棋谱
+    # 12) 落盘棋谱 + 对局事件广播（供前端实时感知）
     append_move_record(sess["game_id"], sess["move_index"], user_move.to_dict(), engine_res, ai_new_fen, events)
+    ws_hub.broadcast_game_event(sess["game_id"], "move")
+    if sess["game_over"]:
+        ws_hub.broadcast_game_event(sess["game_id"], f"result:{sess['stats'].get('last_result')}")
 
     return MoveResponse(
         game_id=sess["game_id"],

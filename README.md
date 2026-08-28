@@ -101,7 +101,9 @@ os2026_chess_friend/
 │   │   │   ├── memory_manager.py
 │   │   │   ├── prompt_builder.py
 │   │   │   ├── llm_client.py
-│   │   │   └── avatar_dispatcher.py
+│   │   │   ├── avatar_dispatcher.py        # 具身指令分发器(状态机/表演队列/打断)
+│   │   │   ├── xmov_client.py              # 星云协议适配层(情绪/动作映射+SSML)+时序调度
+│   │   │   └── ws_hub.py                   # 对局 WebSocket 事件中心(数字人状态/棋局事件)
 │   │   ├── models/               # Pydantic 数据模型
 │   │   └── db/                   # SQLite 访问层
 │   ├── vendor/xiangqi/           # vendored logic.js 引擎（MIT，含 NOTICE 归属）
@@ -160,6 +162,9 @@ docker compose up -d
 - `memory_manager`：分层记忆适配器（短期 / Mem0 长期 / SQLite 结构化画像）
 - `prompt_builder`：五层 Prompt 组装器
 - `avatar_dispatcher`：具身指令分发器（表演队列、状态机、语音打断）
+- `xmov_client`：魔珐星云协议适配层（情绪/动作映射、SSML 组装）+ 表演时序调度
+- `ws_hub`：对局 WebSocket 事件中心（数字人状态 / 棋局事件实时推送）
+- `avatar-adapter.js`：前端数字人适配层（星云 SDK 优先，Web Speech 朗读降级）
 - Docker-Compose 部署、降级开关、适老化业务逻辑
 
 ### 🔁 复用依赖（MIT / Apache-2.0 兼容）
@@ -184,7 +189,7 @@ docker compose up -d
 
 - [x] **第一阶段（基础打通，引擎已接入）**：棋局解析模块、LLM 链路、基础台词输出 ✅；象棋引擎 AI 应手/评估/胜负判定 ✅；**前端棋盘 + FastAPI 联调 ✅（自研 vanilla JS 前端，同源服务）**
 - [x] **第二阶段（记忆画像）**：分层记忆 ✅（短期会话 + 长期记忆适配器，未装 mem0 时自动降级 SQLite 子串召回）；**SQLite 画像读写与 diff 更新 ✅**（对局统计实时累加、开局/棋风/棋力识别、对局终结胜负落盘、长期记忆摘要）
-- [ ] **第三阶段（数字人链路）**：`avatar_dispatcher`；对接魔珐星云 SDK；表演队列 + 语音打断 + 降级开关
+- [x] **第三阶段（数字人链路）**：具身指令分发器状态机 ✅（IDLE/THINKING/SPEAKING + 表演队列 + 语音打断）；星云协议适配层 ✅（情绪→SDK emotion 枚举、动作→KA 关键动作、SSML 组装）；对局 WS 事件中心 ✅（后端推 thinking/speaking/idle + 棋局事件）；前端数字人适配层 ✅（星云 XmovAvatar litesdk 优先，Web Speech 中文朗读/文字降级）；**待真机**：加载 litesdk 后在浏览器渲染 3D 数字人（需在可联网环境）
 - [ ] **第四阶段（打磨交付）**：Prompt 调优、时序修复、Docker-Compose 可复现、演示录屏、PDF 文档
 - [ ] **第五阶段**：10-11 前打包提交赛事（oscc@oschina.cn）
 

@@ -81,7 +81,9 @@ def test_illegal_move_rejected():
 
 def test_move_updates_profile_stats():
     from backend.app.api import routes
+    from backend.app.core.memory_manager import ProfileStore
 
+    ProfileStore().reset("u-stats")  # 隔离：清掉历史跨对局统计，保证 moves==1
     g = client.post("/api/games", json={"user_id": "u-stats"}).json()
     legal = client.get("/api/moves/legal", params={"fen": g["fen"], "color": "red"}).json()
     mv = legal["moves"][0]

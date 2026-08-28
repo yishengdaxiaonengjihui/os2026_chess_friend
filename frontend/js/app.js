@@ -19,6 +19,8 @@
     profile: document.getElementById("profile"),
     memories: document.getElementById("memories"),
     aiThinking: document.getElementById("ai-thinking"),
+    dhChip: document.getElementById("dh-chip"),
+    avatarContainer: document.getElementById("avatar-container"),
   };
 
   const AVATARS = { laozhang: ["🧓", "老张"], xiaoya: ["👩", "小雅"] };
@@ -146,6 +148,57 @@
     el.avatarName.textContent = a[1];
   }
 
+  // ---- 数字人状态指示（第三阶段）----
+  function setDhState(state) {
+    const map = {
+      speaking: "🎤 数字人：讲话中",
+      thinking: "🤔 数字人：思考中",
+      idle: "🤖 数字人：就绪",
+      off: "⛔ 数字人：已关闭",
+    };
+    el.dhChip.textContent = map[state] || ("🤖 数字人：" + state);
+  }
+
+  let dhWs = null;
+  let avatarAdapter = null;
+
+  // 初始化数字人适配层（星云 SDK 优先，朗读降级）；每页只建一次
+  function initAvatarAdapter(dhEnabled) {
+    if (avatarAdapter || !dhEnabled || !window.AvatarAdapter) return;
+    fetch("/api/info")
+      .then(function (r) { return r.json(); })
+      .then(function (info) {
+        var x = info.xmov || {};
+        if (!x.app_id) { setDhState("off"); return; }
+        avatarAdapter = new AvatarAdapter({
+          appId: x.app_id,
+          appSecret: x.app_secret,
+          gateway: x.gateway,
+        });
+        avatarAdapter.onState = function (s) { setDhState(s); };
+        avatarAdapter.onReady = function () {
+          el.avatar.style.display = "none";
+          el.avatarContainer.classList.remove("hidden");
+        };
+        avatarAdapter.init();
+      })
+      .catch(function () { setDhState("off"); });
+  }
+
+  function connectDhWs(gameId) {
+    if (dhWs) { try { dhWs.close(); } catch (e) { /* 忽略 */ } dhWs = null; }
+    try {
+      const proto = location.protocol === "https:" ? "wss://" : "ws://";
+      dhWs = new WebSocket(proto + location.host + "/ws/game/" + gameId);
+      dhWs.onmessage = function (ev) {
+        let msg;
+        try { msg = JSON.parse(ev.data); } catch (e) { return; }
+        if (msg.type === "avatar_state" && msg.state) setDhState(msg.state);
+      };
+      dhWs.onclose = function () { dhWs = null; };
+    } catch (e) { /* WS 不可用时静默 */ }
+  }
+
   function resetPanel() {
     el.speech.textContent = "你好呀老哥，咱开局杀一盘！";
     el.emotionChip.textContent = "情绪 --";
@@ -177,8 +230,12 @@
       if (!game.digital_human_enabled) {
         el.avatar.style.opacity = "0.4";
         el.avatar.title = "数字人已降级（ENABLE_DIGITAL_HUMAN=false）";
+        setDhState("off");
       } else {
         el.avatar.style.opacity = "1";
+        setDhState("idle");
+        initAvatarAdapter(true);
+        connectDhWs(game.game_id);
       }
     } catch (err) {
       setStatus("开局失败：" + err.message);
@@ -218,6 +275,8 @@
   async function makeMove(file, rank) {
     state.busy = true;
     state.board.setBusy(true);
+    // 用户落子 = 主动打断数字人讲话（barge-in）
+    if (avatarAdapter) avatarAdapter.stop();
     const fromSq = fileToSq(state.selected.file, state.selected.rank);
     const toSq = fileToSq(file, rank);
     // 乐观落子：先本地渲染你的着法（滑动动画），不等后端
@@ -242,6 +301,12 @@
       // 棋友面板
       const llm = resp.llm_output;
       el.speech.textContent = llm.speech_text;
+      if (resp.avatar_command) {
+        if (avatarAdapter) avatarAdapter.speak(resp.avatar_command);
+        else setDhState("speaking");
+      } else {
+        setDhState("off");
+      }
       el.emotionChip.textContent = "情绪 " + llm.emotion_tag;
       el.actionChip.textContent = "动作 " + llm.action_tag;
       if (resp.ai_move && typeof resp.ai_move.win_probability === "number") {

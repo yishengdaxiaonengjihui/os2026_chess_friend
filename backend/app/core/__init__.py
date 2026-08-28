@@ -8,6 +8,7 @@ from . import (
     prompt_builder,
 )
 from .avatar_dispatcher import AvatarDispatcher, AvatarState, PerformanceCommand
+from .xmov_client import XmovAvatarClient
 from .chess_context_parser import (
     apply_move_to_fen,
     build_context,
@@ -24,6 +25,7 @@ __all__ = [
     "AvatarDispatcher",
     "AvatarState",
     "PerformanceCommand",
+    "XmovAvatarClient",
     "EngineError",
     "ai_move",
     "legal_moves",
