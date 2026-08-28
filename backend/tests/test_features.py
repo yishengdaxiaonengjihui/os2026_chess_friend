@@ -70,6 +70,65 @@ def test_undo_flow():
     routes._sessions.pop(g["game_id"], None)
 
 
+
+def test_resign_flow():
+    """认输：判负、终局、棋谱记录 result=lose，且终局后不能再落子/再认输。"""
+    from backend.app.api import routes
+
+    uid = "u-resign"
+    g = client.post("/api/games", json={"user_id": uid}).json()
+    r = client.post(f"/api/games/{g['game_id']}/resign")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["game_over"] is True
+    assert body["result"] == "lose"
+    assert body["llm_output"]["speech_text"]
+
+    # 终局后：再次认输 -> 400；落子 -> 400
+    assert client.post(f"/api/games/{g['game_id']}/resign").status_code == 400
+    assert client.post(
+        "/api/moves",
+        json={"game_id": g["game_id"], "user_id": uid, "from_sq": "h7", "to_sq": "h3"},
+    ).status_code == 400
+
+    # 棋谱库记录 result=lose
+    games = client.get("/api/games", params={"user_id": uid}).json()["games"]
+    mine = next(x for x in games if x["game_id"] == g["game_id"])
+    assert mine["result"] == "lose"
+    routes._sessions.pop(g["game_id"], None)
+
+
+def test_draw_offer():
+    """和棋：AI 按局面判断，返回 accepted + 人格化台词；终局后不可再提。"""
+    from backend.app.api import routes
+
+    uid = "u-draw"
+    g = client.post("/api/games", json={"user_id": uid}).json()
+    r = client.post(f"/api/games/{g['game_id']}/draw")
+    assert r.status_code == 200
+    body = r.json()
+    assert isinstance(body["accepted"], bool)
+    assert "user_win_prob" in body
+    assert body["llm_output"]["speech_text"]
+    if body["accepted"]:
+        assert body["game_over"] is True
+        # 终局后再提和棋 -> 400
+        assert client.post(f"/api/games/{g['game_id']}/draw").status_code == 400
+        # 棋谱库记录 result=draw
+        games = client.get("/api/games", params={"user_id": uid}).json()["games"]
+        mine = next(x for x in games if x["game_id"] == g["game_id"])
+        assert mine["result"] == "draw"
+    else:
+        assert body["game_over"] is False
+        # 未被同意 -> 仍可落子
+        legal = client.get("/api/moves/legal", params={"fen": g["fen"], "color": "red"}).json()
+        mv = legal["moves"][0]
+        assert client.post(
+            "/api/moves",
+            json={"game_id": g["game_id"], "user_id": uid, "from_sq": mv["from"], "to_sq": mv["to"]},
+        ).status_code == 200
+    routes._sessions.pop(g["game_id"], None)
+
 def test_games_library_endpoints():
     from backend.app.api import routes
     from backend.app.core.memory_manager import ProfileStore

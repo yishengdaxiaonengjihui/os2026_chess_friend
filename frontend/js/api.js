@@ -51,6 +51,12 @@
     async gameMoves(gameId) {
       return request("/api/games/" + gameId + "/moves");
     },
+    async drawOffer(gameId) {
+      return request("/api/games/" + gameId + "/draw", { method: "POST" });
+    },
+    async resign(gameId) {
+      return request("/api/games/" + gameId + "/resign", { method: "POST" });
+    },
   };
 
   global.API = API;

@@ -22,6 +22,8 @@
     avatarContainer: document.getElementById("avatar-container"),
     btnUndo: document.getElementById("btn-undo"),
     btnGames: document.getElementById("btn-games"),
+    btnDraw: document.getElementById("btn-draw"),
+    btnResign: document.getElementById("btn-resign"),
     gamesList: document.getElementById("games-list"),
     modalMask: document.getElementById("modal-mask"),
     modalTitle: document.getElementById("modal-title"),
@@ -36,6 +38,7 @@
     game: null,
     fen: "",
     busy: false,
+    gameOver: false,
     selected: null, // {file, rank}
     targets: [],
   };
@@ -225,6 +228,7 @@
       resetPanel();
       const game = await API.newGame(userId(), personality);
       state.game = game;
+      state.gameOver = false;
       state.fen = game.fen;
       state.selected = null;
       state.targets = [];
@@ -279,6 +283,7 @@
   }
 
   async function makeMove(file, rank) {
+    if (state.gameOver) return;
     state.busy = true;
     state.board.setBusy(true);
     // 用户落子 = 主动打断数字人讲话（barge-in）
@@ -324,9 +329,18 @@
       // 终局判断
       const hasMate = resp.events.some(function (e) { return e.indexOf("将死") >= 0; });
       const hasStale = resp.events.some(function (e) { return e.indexOf("困毙") >= 0; });
-      if (hasMate) setStatus("对局结束：你被将死了，老张险胜！点击「新开对局」再来一盘");
-      else if (hasStale) setStatus("对局结束：困毙，和棋。");
-      else setStatus("该你走棋（红方）");
+      if (hasMate) {
+        state.gameOver = true;
+        const userWon = resp.events.some(function (e) { return e.indexOf("玩家获胜") >= 0; });
+        setStatus(userWon ? "对局结束：你将死老张，赢了！点击「新开对局」再来一盘" : "对局结束：你被将死了，老张险胜！点击「新开对局」再来一盘");
+        refreshGamesList();
+      } else if (hasStale) {
+        state.gameOver = true;
+        setStatus("对局结束：困毙，和棋。点击「新开对局」再来一盘");
+        refreshGamesList();
+      } else {
+        setStatus("该你走棋（红方）");
+      }
     } catch (err) {
       setStatus("落子失败：" + err.message);
     } finally {
@@ -341,6 +355,7 @@
 
   state.board.onSquareClick = function (file, rank) {
     if (state.busy) return;
+    if (state.gameOver) return;
     if (!state.game) { setStatus("请先新开对局"); return; }
     if (state.selected) {
       const isTarget = state.targets.some(function (t) { return t.file === file && t.rank === rank; });
@@ -391,6 +406,60 @@
       addEvent("悔棋一步");
     } catch (err) {
       setStatus("悔棋失败：" + err.message);
+    } finally {
+      state.busy = false;
+      state.board.setBusy(false);
+    }
+  }
+
+  // ---- 和棋（AI 自动判断）/ 认输 ----
+  el.btnDraw.addEventListener("click", drawOffer);
+  async function drawOffer() {
+    if (state.busy || state.gameOver || !state.game) return;
+    if (!window.confirm("提出和棋？AI 会判断是否同意。")) return;
+    state.busy = true;
+    state.board.setBusy(true);
+    try {
+      const res = await API.drawOffer(state.game.game_id);
+      const llm = res.llm_output || {};
+      el.speech.textContent = llm.speech_text || (res.accepted ? "咱就和了吧。" : "还早呢，再下几手。");
+      if (avatarAdapter) avatarAdapter.speak({ ssml: llm.speech_text, emotion_sdk: llm.emotion_tag });
+      else setDhState("speaking");
+      if (res.accepted) {
+        state.gameOver = true;
+        setStatus("对局结束：和棋！点击「新开对局」再来一盘");
+        addEvent("🤝 和棋：AI 同意和棋");
+        refreshGamesList();
+      } else {
+        setStatus("AI 不同意和棋，继续对局（该你走棋）");
+        addEvent("🤝 提出和棋，AI 暂不同意，继续下");
+      }
+    } catch (err) {
+      setStatus("和棋请求失败：" + err.message);
+    } finally {
+      state.busy = false;
+      state.board.setBusy(false);
+    }
+  }
+
+  el.btnResign.addEventListener("click", resignGame);
+  async function resignGame() {
+    if (state.busy || state.gameOver || !state.game) return;
+    if (!window.confirm("确定认输吗？认输后本局判负。")) return;
+    state.busy = true;
+    state.board.setBusy(true);
+    try {
+      const res = await API.resign(state.game.game_id);
+      const llm = res.llm_output || {};
+      el.speech.textContent = llm.speech_text || "没事老哥，胜负常有，咱再开一局！";
+      if (avatarAdapter) avatarAdapter.speak({ ssml: llm.speech_text, emotion_sdk: llm.emotion_tag });
+      else setDhState("speaking");
+      state.gameOver = true;
+      setStatus("对局结束：你认输了，老张获胜。点击「新开对局」再来一盘");
+      addEvent("🏳 认输：本局判负");
+      refreshGamesList();
+    } catch (err) {
+      setStatus("认输失败：" + err.message);
     } finally {
       state.busy = false;
       state.board.setBusy(false);

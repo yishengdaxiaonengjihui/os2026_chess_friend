@@ -130,6 +130,44 @@ body {
 
 .busy { pointer-events: none; }
 
+/* ---- 棋子移动轨迹 ---- */
+.trail-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 5;
+}
+@keyframes trail-fade { from { opacity: .92; } to { opacity: 0; } }
+.trail {
+  stroke: #e67e22;
+  stroke-width: 3;
+  stroke-dasharray: 7 4;
+  stroke-linecap: round;
+  animation: trail-fade 1.4s ease forwards;
+}
+.trail.ai { stroke: #1f5b8b; }
+.trail-dot { fill: #e67e22; animation: trail-fade 1.4s ease forwards; }
+.trail-dot.ai { fill: #1f5b8b; }
+
+/* ---- 和棋/认输 按钮行 ---- */
+.game-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+.game-actions button {
+  flex: 1;
+  padding: 8px 0;
+  font-size: 16px;
+  border: 1px solid #b9c6d0;
+  border-radius: 10px;
+  background: #f2f6f9;
+  cursor: pointer;
+}
+.game-actions button:hover { background: #e4edf4; }
+
 .avatar-canvas {
   width: 100%;
   height: 220px;

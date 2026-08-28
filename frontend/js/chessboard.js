@@ -45,8 +45,12 @@
       this.svg = svg;
       this.layer = document.createElement("div");
       this.layer.style.cssText = "position:absolute;inset:0;";
+      this.trailSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      this.trailSvg.setAttribute("class", "trail-layer");
+      this.trailSvg.setAttribute("viewBox", "0 0 1 1");
       this.el.appendChild(svg);
       this.el.appendChild(this.layer);
+      this.el.appendChild(this.trailSvg);
       this.el.addEventListener("click", (ev) => this._onClick(ev));
     }
 
@@ -102,11 +106,28 @@
         c.setAttribute("r", sw * 1.1); c.setAttribute("fill", stroke);
         svg.appendChild(c);
       }
+      // 楚河 汉界（河界中心：文件4、行4.5；text-anchor+dominant-baseline 双居中，保证位置精准）
+      const txt = (text, x, y) => {
+        const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        t.setAttribute("x", x);
+        t.setAttribute("y", y);
+        t.setAttribute("text-anchor", "middle");
+        t.setAttribute("dominant-baseline", "central");
+        t.setAttribute("fill", "#7a5230");
+        t.setAttribute("font-size", L.stepX * 0.62);
+        t.setAttribute("font-family", "KaiTi, STKaiti, serif");
+        t.textContent = text;
+        svg.appendChild(t);
+      };
+      const riverY = L.padY + 4.5 * L.stepY;
+      txt("楚 河", this._x(3), riverY);
+      txt("汉 界", this._x(5), riverY);
     }
 
     setFen(fen) {
       this.fen = fen;
       this._layout = this._computeLayout();
+      this.trailSvg.setAttribute("viewBox", "0 0 " + this._layout.w + " " + this._layout.h);
       this._drawGrid();
       const cells = parseFen(fen);
       this.layer.innerHTML = "";
@@ -173,6 +194,30 @@
       this.aiFrom = [FILES.indexOf(fromSq[0]), parseInt(fromSq[1], 10)];
       this.aiTo = [FILES.indexOf(toSq[0]), parseInt(toSq[1], 10)];
       this.setFen(this.fen);
+      this.showTrail(fromSq, toSq, "ai");
+    }
+
+    showTrail(fromSq, toSq, cls) {
+      // 移动轨迹：从源格到目标格画一条淡出的线 + 终点圆点（方便看清棋子走向）
+      const L = this._layout;
+      if (!L) return;
+      const ff = FILES.indexOf(fromSq[0]);
+      const fr = parseInt(fromSq[1], 10);
+      const tf = FILES.indexOf(toSq[0]);
+      const tr = parseInt(toSq[1], 10);
+      const x1 = this._x(ff), y1 = this._y(fr);
+      const x2 = this._x(tf), y2 = this._y(tr);
+      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      line.setAttribute("x1", x1); line.setAttribute("y1", y1);
+      line.setAttribute("x2", x2); line.setAttribute("y2", y2);
+      line.setAttribute("class", "trail " + (cls || ""));
+      const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      dot.setAttribute("cx", x2); dot.setAttribute("cy", y2);
+      dot.setAttribute("r", L.stepX * 0.12);
+      dot.setAttribute("class", "trail-dot " + (cls || ""));
+      this.trailSvg.appendChild(line);
+      this.trailSvg.appendChild(dot);
+      setTimeout(function () { line.remove(); dot.remove(); }, 1500);
     }
 
     movePiece(fromSq, toSq, fen) {
@@ -196,6 +241,7 @@
       mover.classList.remove("selected");
       mover.style.left = this._x(tf) + "px";
       mover.style.top = this._y(tr) + "px";
+      this.showTrail(fromSq, toSq, "user");
       this.fen = fen;
     }
 

@@ -27,7 +27,7 @@ from ..core import (
     toggle_side,
     ws_hub,
 )
-from ..core.chess_engine import ai_move, legal_moves, position_status
+from ..core.chess_engine import ai_move, legal_moves, position_status, score_to_win_prob
 from ..core.game_stats import (
     build_game_summary,
     finalize_game,
@@ -124,6 +124,29 @@ def _result_from_engine(user_fen: str, ai_new_fen: str, engine_res: dict) -> str
         if status.get("stalemate"):
             return "draw"
     return None
+
+
+def _persona_comment(sess: dict, topic: str, extra: str = "") -> dict:
+    """按当前人格生成一句简短回应（LLM 失败自动回退固定台词）。"""
+    system = system_role_for(sess["personality"])
+    prompt = (
+        "你正在陪独居老人李大爷下中国象棋。"
+        f"棋友刚刚{topic}。{extra}"
+        "请用你的口吻简短回应一句（不超过25字），口语化、符合你的性格。"
+        '输出严格为 JSON 对象：{"speech_text":"...","emotion_tag":"...","action_tag":"..."}。'
+    )
+    try:
+        out = _llm.chat([{"role": "system", "content": system}, {"role": "user", "content": prompt}])
+        if out and out.get("speech_text"):
+            return out
+    except Exception:  # noqa: BLE001
+        pass
+    fallback = {
+        "draw_accepted": {"speech_text": "行，这局面僵住了，咱就和了吧，下得不错！", "emotion_tag": "平静", "action_tag": "nod"},
+        "draw_declined": {"speech_text": "哈哈不急，我这还占着上风呢，再战几个回合！", "emotion_tag": "得意", "action_tag": "wave"},
+        "resign": {"speech_text": "没事老哥，胜负常有，咱再开一局！", "emotion_tag": "鼓励", "action_tag": "nod"},
+    }
+    return fallback.get(topic, fallback["resign"])
 
 
 @router.get("/health")
@@ -342,6 +365,81 @@ def undo_move(game_id: str) -> UndoResponse:
             turns.pop()
     ws_hub.broadcast_game_event(game_id, "undo")
     return UndoResponse(status="ok", fen=sess["fen"], move_index=sess["move_index"], game_over=False)
+
+
+@router.post("/api/games/{game_id}/draw")
+def draw_offer(game_id: str) -> dict:
+    """和棋：AI 按当前局面自动判断是否同意。同意则终局为和棋。"""
+    sess = _sessions.get(game_id)
+    if not sess:
+        raise HTTPException(status_code=404, detail="game_id 不存在")
+    if sess["game_over"]:
+        raise HTTPException(status_code=400, detail="本局已结束")
+
+    # AI 判断：按当前局面用户(红)胜率决定是否同意和棋
+    status = position_status(sess["fen"], color="red")
+    ev = status.get("evaluate")
+    user_win_prob = round(score_to_win_prob(ev), 4) if ev is not None else 0.5
+    accepted = user_win_prob >= 0.4  # AI 无明显优势即同意
+    topic = "draw_accepted" if accepted else "draw_declined"
+    llm_out = _persona_comment(sess, topic)
+
+    sess["memory"].remember_turn("user", "（棋友提出和棋，AI " + ("同意" if accepted else "暂不同意") + "）")
+    sess["memory"].remember_turn("assistant", llm_out["speech_text"])
+    cmd = PerformanceCommand(
+        speech_text=llm_out["speech_text"],
+        emotion_tag=llm_out["emotion_tag"],
+        action_tag=llm_out["action_tag"],
+    )
+    sess["dispatcher"].play_sync(cmd)
+
+    resp: dict = {
+        "accepted": accepted,
+        "user_win_prob": user_win_prob,
+        "llm_output": llm_out,
+        "game_over": False,
+    }
+    if accepted:
+        sess["game_over"] = True
+        finalize_game(sess["stats"], "draw")
+        summary = build_game_summary(sess["stats"], "draw")
+        sess["memory"].long_term.add(
+            summary, metadata={"type": "game_summary", "game_id": game_id, "result": "draw"}
+        )
+        finish_game_record(game_id, "draw", sess["fen"])
+        resp["game_over"] = True
+        ws_hub.broadcast_game_event(game_id, "result:draw")
+    return resp
+
+
+@router.post("/api/games/{game_id}/resign")
+def resign(game_id: str) -> dict:
+    """认输：本局判负（用户视角 lose），终局。"""
+    sess = _sessions.get(game_id)
+    if not sess:
+        raise HTTPException(status_code=404, detail="game_id 不存在")
+    if sess["game_over"]:
+        raise HTTPException(status_code=400, detail="本局已结束")
+
+    sess["game_over"] = True
+    finalize_game(sess["stats"], "lose")
+    summary = build_game_summary(sess["stats"], "lose")
+    sess["memory"].long_term.add(
+        summary, metadata={"type": "game_summary", "game_id": game_id, "result": "lose"}
+    )
+    finish_game_record(game_id, "lose", sess["fen"])
+
+    llm_out = _persona_comment(sess, "resign")
+    sess["memory"].remember_turn("user", "（棋友认输）")
+    sess["memory"].remember_turn("assistant", llm_out["speech_text"])
+    cmd = PerformanceCommand(
+        speech_text=llm_out["speech_text"],
+        emotion_tag=llm_out["emotion_tag"],
+        action_tag=llm_out["action_tag"],
+    )
+    sess["dispatcher"].play_sync(cmd)
+    ws_hub.broadcast_game_event(game_id, "result:lose")
+    return {"status": "ok", "game_over": True, "result": "lose", "llm_output": llm_out}
 
 
 @router.get("/api/games", response_model=GamesListResponse)
