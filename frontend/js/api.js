@@ -39,6 +39,18 @@
     async makeMove(gameId, userId, fromSq, toSq) {
       return request("/api/moves", jsonBody({ game_id: gameId, user_id: userId, from_sq: fromSq, to_sq: toSq }));
     },
+    async setPersonality(gameId, personality) {
+      return request("/api/games/" + gameId + "/personality", jsonBody({ personality: personality }));
+    },
+    async undo(gameId) {
+      return request("/api/games/" + gameId + "/undo", { method: "POST" });
+    },
+    async listGames(userId) {
+      return request("/api/games?user_id=" + encodeURIComponent(userId));
+    },
+    async gameMoves(gameId) {
+      return request("/api/games/" + gameId + "/moves");
+    },
   };
 
   global.API = API;

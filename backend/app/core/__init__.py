@@ -19,7 +19,7 @@ from .chess_context_parser import (
 from .chess_engine import EngineError, ai_move, legal_moves, ping, position_status, score_to_win_prob
 from .llm_client import LLMClient
 from .memory_manager import LongTermMemory, MemoryManager, ProfileStore, ShortTermMemory
-from .prompt_builder import build_prompt
+from .prompt_builder import build_prompt, system_role_for
 
 __all__ = [
     "AvatarDispatcher",
@@ -43,4 +43,5 @@ __all__ = [
     "ProfileStore",
     "ShortTermMemory",
     "build_prompt",
+    "system_role_for",
 ]

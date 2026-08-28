@@ -18,9 +18,15 @@
     events: document.getElementById("events"),
     profile: document.getElementById("profile"),
     memories: document.getElementById("memories"),
-    aiThinking: document.getElementById("ai-thinking"),
     dhChip: document.getElementById("dh-chip"),
     avatarContainer: document.getElementById("avatar-container"),
+    btnUndo: document.getElementById("btn-undo"),
+    btnGames: document.getElementById("btn-games"),
+    gamesList: document.getElementById("games-list"),
+    modalMask: document.getElementById("modal-mask"),
+    modalTitle: document.getElementById("modal-title"),
+    modalBody: document.getElementById("modal-body"),
+    modalClose: document.getElementById("modal-close"),
   };
 
   const AVATARS = { laozhang: ["🧓", "老张"], xiaoya: ["👩", "小雅"] };
@@ -152,7 +158,7 @@
   function setDhState(state) {
     const map = {
       speaking: "🎤 数字人：讲话中",
-      thinking: "🤔 数字人：思考中",
+      thinking: "🤔 让我想想…",
       idle: "🤖 数字人：就绪",
       off: "⛔ 数字人：已关闭",
     };
@@ -284,8 +290,7 @@
     state.fen = optimistic;
     state.board.movePiece(fromSq, toSq, optimistic);
     legalCache = {};
-    setStatus("你已落子，AI 思考中…");
-    el.aiThinking.classList.remove("hidden");
+    setStatus("你已落子，老张想想怎么走…");
     try {
       const resp = await API.makeMove(state.game.game_id, state.game.user_id, fromSq, toSq);
       state.fen = resp.new_fen;
@@ -327,7 +332,6 @@
     } finally {
       state.busy = false;
       state.board.setBusy(false);
-      el.aiThinking.classList.add("hidden");
       state.selected = null;
       state.targets = [];
       state.board.clearTargets();
@@ -352,8 +356,123 @@
   };
 
   el.btnNew.addEventListener("click", newGame);
-  el.personality.addEventListener("change", function () { setAvatar(el.personality.value); });
+
+  // ---- 人格切换：同步后端（新人格重新开始聊天记忆）----
+  el.personality.addEventListener("change", function () {
+    const p = el.personality.value;
+    setAvatar(p);
+    if (state.game) {
+      API.setPersonality(state.game.game_id, p)
+        .then(function () {
+          addEvent("已切换棋友人格：" + (p === "xiaoya" ? "小雅（温柔陪练）" : "老张（豪爽棋友）"));
+          setStatus("该你走棋（红方）");
+          el.speech.textContent = p === "xiaoya" ? "你好呀，咱们慢慢下，不急～" : "好嘞，换我老张陪你杀一盘！";
+        })
+        .catch(function () { /* 切换失败静默 */ });
+    }
+  });
+
+  // ---- 悔棋 ----
+  el.btnUndo.addEventListener("click", undoMove);
+  async function undoMove() {
+    if (state.busy || !state.game) return;
+    state.busy = true;
+    state.board.setBusy(true);
+    try {
+      const res = await API.undo(state.game.game_id);
+      state.fen = res.fen;
+      state.selected = null;
+      state.targets = [];
+      legalCache = {};
+      state.board.clearSelection();
+      state.board.clearTargets();
+      state.board.setFen(res.fen);
+      setStatus("已悔棋一步，该你走棋（红方）");
+      addEvent("悔棋一步");
+    } catch (err) {
+      setStatus("悔棋失败：" + err.message);
+    } finally {
+      state.busy = false;
+      state.board.setBusy(false);
+    }
+  }
+
+  // ---- 棋谱库 ----
+  function resultText(r) {
+    return { win: "胜", lose: "负", draw: "和" }[r] || "未结束";
+  }
+  async function refreshGamesList() {
+    try {
+      const res = await API.listGames(userId());
+      if (!res.games || res.games.length === 0) {
+        el.gamesList.textContent = "对局落子后自动保存";
+        el.gamesList.className = "muted";
+        return;
+      }
+      el.gamesList.className = "";
+      el.gamesList.innerHTML = "";
+      res.games.slice(0, 5).forEach(function (g) {
+        const row = document.createElement("div");
+        row.className = "game-mini";
+        row.textContent = (g.created_at || "").slice(5, 16) + " · " + g.move_count + "手 · " + resultText(g.result);
+        row.title = "点击查看完整棋谱";
+        row.addEventListener("click", function () { openGamesLibrary(); });
+        el.gamesList.appendChild(row);
+      });
+    } catch (e) { /* 静默 */ }
+  }
+
+  el.btnGames.addEventListener("click", openGamesLibrary);
+  async function openGamesLibrary() {
+    el.modalTitle.textContent = "棋谱库";
+    el.modalBody.innerHTML = "<div class='muted'>加载中…</div>";
+    el.modalMask.classList.remove("hidden");
+    try {
+      const res = await API.listGames(userId());
+      if (!res.games || res.games.length === 0) {
+        el.modalBody.innerHTML = "<div class='muted'>暂无棋谱（下完一局后自动保存）</div>";
+        return;
+      }
+      el.modalBody.innerHTML = res.games.map(function (g) {
+        return "<div class='game-row' data-gid='" + g.game_id + "'>" +
+          (g.created_at || "").slice(0, 16) + " · " + g.move_count + "手 · " + resultText(g.result) +
+          "</div>";
+      }).join("");
+      el.modalBody.querySelectorAll(".game-row").forEach(function (row) {
+        row.addEventListener("click", function () { showGameMoves(row.getAttribute("data-gid")); });
+      });
+    } catch (err) {
+      el.modalBody.innerHTML = "<div class='muted'>棋谱库加载失败：" + err.message + "</div>";
+    }
+  }
+
+  async function showGameMoves(gameId) {
+    el.modalTitle.textContent = "棋谱 " + gameId;
+    el.modalBody.innerHTML = "<div class='muted'>加载中…</div>";
+    try {
+      const res = await API.gameMoves(gameId);
+      if (!res.moves || res.moves.length === 0) {
+        el.modalBody.innerHTML = "<div class='muted'>暂无着法记录</div>";
+        return;
+      }
+      const rows = res.moves.map(function (m) {
+        const um = m.user_move ? (m.user_move.piece_name || m.user_move.piece) + " " + m.user_move.from + "→" + m.user_move.to : "";
+        const am = (m.ai_move && m.ai_move.from_sq) ? " · 黑 " + m.ai_move.from_sq + "→" + m.ai_move.to_sq : "";
+        const ev = (m.events && m.events.length) ? "<span class='mv-events'>" + m.events.join("；") + "</span>" : "";
+        return "<div class='move-row'>第" + m.move_index + "手 " + um + am + ev + "</div>";
+      }).join("");
+      el.modalBody.innerHTML = rows;
+    } catch (err) {
+      el.modalBody.innerHTML = "<div class='muted'>棋谱加载失败：" + err.message + "</div>";
+    }
+  }
+
+  el.modalClose.addEventListener("click", function () { el.modalMask.classList.add("hidden"); });
+  el.modalMask.addEventListener("click", function (e) {
+    if (e.target === el.modalMask) el.modalMask.classList.add("hidden");
+  });
 
   // 启动
   newGame();
+  refreshGamesList();
 })();

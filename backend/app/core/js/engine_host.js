@@ -122,7 +122,13 @@ try {
         const p = board[r][c];
         if (p && p.c === color) {
           const list = logic.getLegalMovesFiltered(board, r, c);
-          for (const t of list) moves.push({ from: sqOf([r, c]), to: sqOf(t) });
+          for (const t of list) {
+            // 送吃保护：走完这一步若己方老帅受攻（被吃/被将军），视为非法着法
+            const nb = logic.applyMove(board, [r, c], t);
+            if (!logic.isInCheck(nb, color)) {
+              moves.push({ from: sqOf([r, c]), to: sqOf(t) });
+            }
+          }
         }
       }
     }

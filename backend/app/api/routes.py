@@ -5,6 +5,8 @@ SQLite 画像 diff 更新。
 """
 from __future__ import annotations
 
+import copy
+import json
 import logging
 import uuid
 
@@ -21,6 +23,7 @@ from ..core import (
     build_prompt,
     detect_move,
     make_default_fen,
+    system_role_for,
     toggle_side,
     ws_hub,
 )
@@ -32,15 +35,28 @@ from ..core.game_stats import (
     style_strength_diff,
     update_live_stats,
 )
-from ..db.database import append_move_record, finish_game_record, init_db, save_game_record
+from ..db.database import (
+    append_move_record,
+    clear_game_result,
+    decrement_move_count,
+    finish_game_record,
+    get_game_moves,
+    init_db,
+    list_games,
+    remove_last_move_record,
+    save_game_record,
+)
 from ..models.schemas import (
+    GamesListResponse,
     InterruptRequest,
     LLMOutput,
     MoveRequest,
     MoveResponse,
     NewGameRequest,
     NewGameResponse,
+    PersonalityRequest,
     ProfileResponse,
+    UndoResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -85,11 +101,17 @@ def _new_session(user_id: str, personality: str) -> dict:
     return sess
 
 
-def _result_from_engine(user_fen: str, engine_res: dict) -> str | None:
+def _result_from_engine(user_fen: str, ai_new_fen: str, engine_res: dict) -> str | None:
     """对局结果：'win' | 'lose' | 'draw' | None(未结束)。
 
     engine_res 是 AI(黑) 视角；opponent = 用户。
+    结局只允许三种：用户被将死(lose)、用户将死 AI(win)、和棋(draw)。
     """
+    # 兜底：将帅被吃/消失即判胜负（老帅送吃等边界情形）
+    if "K" not in ai_new_fen:
+        return "lose"   # 红帅不在 -> 用户被将死
+    if "k" not in ai_new_fen:
+        return "win"    # 黑将不在 -> 用户将死 AI
     if engine_res.get("opponent_checkmate"):
         return "lose"  # 用户被将死
     if engine_res.get("opponent_stalemate"):
@@ -134,20 +156,39 @@ def make_move(req: MoveRequest) -> MoveResponse:
     if sess["game_over"]:
         raise HTTPException(status_code=400, detail="本局已结束，请新开对局")
 
-    # 1) 合法性校验（用户执红）
+    # 1) 合法性校验（用户执红；engine 已过滤“送吃”——走完老帅受攻的着法）
     legal = legal_moves(sess["fen"], color="red")
     if (req.from_sq, req.to_sq) not in {(m["from"], m["to"]) for m in legal}:
-        raise HTTPException(status_code=400, detail=f"非法着法 {req.from_sq}->{req.to_sq}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"这一步走不得：会把老帅送上门或违反规则（{req.from_sq}→{req.to_sq}），请重新选择",
+        )
 
     # 2) 用户落子 -> 新 FEN（轮到黑方）
     user_fen = toggle_side(apply_move_to_fen(sess["fen"], req.from_sq, req.to_sq))
     user_move = detect_move(sess["fen"], user_fen)
     sess["move_index"] += 1
 
-    # 3) 引擎 AI 应手（AI 执黑）
-    engine_res = ai_move(user_fen, color="black", move_number=sess["move_index"])
-    ai_new_fen = toggle_side(engine_res["new_fen"])
-    ai_move_obj = detect_move(user_fen, ai_new_fen) if engine_res["from_sq"] else None
+    # 兜底：用户落子后红帅必须健在（引擎已滤送吃，此处防御）
+    if "K" not in user_fen:
+        raise HTTPException(status_code=400, detail="这一步走不得：老帅出险（送吃）")
+
+    # 悔棋支持：快照本轮开始前的统计（undo 时回滚）
+    sess["stats_snapshot"] = copy.deepcopy(sess["stats"])
+
+    # 3) 引擎 AI 应手（AI 执黑）；用户直接吃掉黑将则立即判胜，不再让引擎走
+    if "k" not in user_fen:
+        engine_res = {
+            "from_sq": None, "to_sq": None, "piece": None,
+            "new_fen": user_fen, "score": 10000, "win_probability": 1.0,
+            "opponent_in_check": False, "opponent_checkmate": False, "opponent_stalemate": False,
+        }
+        ai_new_fen = user_fen
+        ai_move_obj = None
+    else:
+        engine_res = ai_move(user_fen, color="black", move_number=sess["move_index"])
+        ai_new_fen = toggle_side(engine_res["new_fen"])
+        ai_move_obj = detect_move(user_fen, ai_new_fen) if engine_res["from_sq"] else None
 
     # 4) 棋局事件（吃子 / 将军 / 将死 / 困毙）
     events: list[str] = []
@@ -155,13 +196,17 @@ def make_move(req: MoveRequest) -> MoveResponse:
         events.append(f"玩家吃子：吃掉对方{user_move.captured_name}")
     if ai_move_obj and ai_move_obj.captured:
         events.append(f"AI 吃子：吃掉玩家{ai_move_obj.captured_name}")
-    if engine_res.get("opponent_in_check"):
+    if "k" not in ai_new_fen:
+        events.append("将死：黑将被吃，玩家获胜！")
+    elif "K" not in ai_new_fen:
+        events.append("将死：红帅被吃，AI 获胜")
+    elif engine_res.get("opponent_in_check"):
         events.append("将军：玩家被将军！")
-    if engine_res.get("opponent_checkmate"):
+    if engine_res.get("opponent_checkmate") and "k" in ai_new_fen:
         events.append("将死：玩家被将死，AI 获胜")
     elif engine_res.get("opponent_stalemate"):
         events.append("困毙：玩家无棋可走")
-    elif engine_res.get("from_sq") is None:
+    elif engine_res.get("from_sq") is None and "k" in ai_new_fen:
         status = position_status(user_fen, color="black")
         if status.get("checkmate"):
             events.append("将死：AI 被将死，玩家获胜！")
@@ -189,7 +234,7 @@ def make_move(req: MoveRequest) -> MoveResponse:
     )
 
     # 7) 对局终结判定 -> 画像 + 长期记忆落盘
-    result = _result_from_engine(user_fen, engine_res)
+    result = _result_from_engine(user_fen, ai_new_fen, engine_res)
     if result is not None:
         sess["game_over"] = True
         finalize_game(stats, result)
@@ -220,6 +265,7 @@ def make_move(req: MoveRequest) -> MoveResponse:
         long_term_memories=recall["long_term"],
         board_context=ctx,
         short_term_history=recall["short_term"],
+        system_role=system_role_for(sess["personality"]),
     )
     llm_out = _llm.chat(messages)
     sess["memory"].remember_turn("assistant", llm_out["speech_text"])
@@ -255,6 +301,59 @@ def make_move(req: MoveRequest) -> MoveResponse:
 def get_legal_moves(fen: str, color: str = "red") -> dict:
     """查询某方在当前局面的全部合法着法（供前端高亮与校验）。"""
     return {"moves": legal_moves(fen, color), "color": color, "fen": fen}
+
+
+@router.post("/api/games/{game_id}/personality")
+def set_personality(game_id: str, req: PersonalityRequest) -> dict:
+    """切换棋友人格：更新 LLM 人设，并清空本局聊天记忆让新人格重新开始。"""
+    sess = _sessions.get(game_id)
+    if not sess:
+        raise HTTPException(status_code=404, detail="game_id 不存在")
+    if req.personality not in ("laozhang", "xiaoya"):
+        raise HTTPException(status_code=400, detail="人格必须是 laozhang 或 xiaoya")
+    sess["personality"] = req.personality
+    sess["memory"].short_term.clear()
+    return {"status": "ok", "personality": req.personality, "game_id": game_id}
+
+
+@router.post("/api/games/{game_id}/undo", response_model=UndoResponse)
+def undo_move(game_id: str) -> UndoResponse:
+    """悔棋一步：回退用户与 AI 的上一轮（棋盘、统计、棋谱、对局状态）。"""
+    sess = _sessions.get(game_id)
+    if not sess:
+        raise HTTPException(status_code=404, detail="game_id 不存在")
+    if sess["move_index"] <= 0:
+        raise HTTPException(status_code=400, detail="开局第一手，没有可悔的棋")
+    # 棋盘与手数回退
+    sess["fen"] = sess["prev_fen"]
+    sess["move_index"] -= 1
+    sess["game_over"] = False
+    # 统计回滚到本轮开始前
+    if "stats_snapshot" in sess:
+        sess["stats"] = sess["stats_snapshot"]
+    # 棋谱：删最后一轮记录、回退手数、清终局结果
+    remove_last_move_record(game_id)
+    decrement_move_count(game_id)
+    clear_game_result(game_id)
+    # 短期聊天记忆：弹掉末尾 user+assistant 两轮
+    turns = sess["memory"].short_term.turns
+    for _ in range(2):
+        if turns:
+            turns.pop()
+    ws_hub.broadcast_game_event(game_id, "undo")
+    return UndoResponse(status="ok", fen=sess["fen"], move_index=sess["move_index"], game_over=False)
+
+
+@router.get("/api/games", response_model=GamesListResponse)
+def list_user_games(user_id: str) -> GamesListResponse:
+    """棋谱库：列出该用户的历史对局（新的在前）。"""
+    return GamesListResponse(games=list_games(user_id))
+
+
+@router.get("/api/games/{game_id}/moves")
+def user_game_moves(game_id: str) -> dict:
+    """棋谱库：返回某对局的逐手记录。"""
+    return {"game_id": game_id, "moves": get_game_moves(game_id)}
 
 
 @router.post("/api/interrupt")

@@ -60,3 +60,18 @@ class InterruptRequest(BaseModel):
     game_id: str
     user_id: str
     transcript: str
+
+
+class PersonalityRequest(BaseModel):
+    personality: str = Field(..., description="人格：laozhang / xiaoya")
+
+
+class UndoResponse(BaseModel):
+    status: str
+    fen: str
+    move_index: int
+    game_over: bool
+
+
+class GamesListResponse(BaseModel):
+    games: list[dict[str, Any]]

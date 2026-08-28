@@ -139,31 +139,72 @@ body {
 }
 .avatar-canvas.hidden { display: none; }
 
-.thinking-pill {
-  position: absolute;
-  top: 3%;
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(255,255,255,.94);
+/* ---- 悔棋 / 棋谱库 / 模态框（适老化：大按钮、大字）---- */
+.mini-btn {
+  padding: 4px 10px;
+  font-size: 14px;
+  border: 1px solid #b9c6d0;
+  border-radius: 8px;
+  background: #f2f6f9;
+  cursor: pointer;
+}
+.mini-btn:hover { background: #e4edf4; }
+
+.game-mini {
+  padding: 4px 8px;
+  margin: 3px 0;
+  font-size: 14px;
+  background: #f7fafc;
+  border-radius: 6px;
+  cursor: pointer;
   color: #1f5b8b;
-  padding: 6px 16px;
-  border-radius: 20px;
-  font-size: 16px;
+}
+.game-mini:hover { background: #eef4f9; }
+
+.modal-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+.modal-mask.hidden { display: none; }
+.modal {
+  width: min(680px, 92vw);
+  max-height: 80vh;
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 8px 30px rgba(0,0,0,.3);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: #1f5b8b;
+  color: #fff;
   font-weight: 700;
-  z-index: 6;
-  box-shadow: 0 2px 8px rgba(0,0,0,.22);
-  pointer-events: none;
-  white-space: nowrap;
 }
-.thinking-pill.hidden { display: none; }
-.pill-dots::after {
-  content: "";
-  animation: pill-blink 1.2s steps(4, end) infinite;
+.modal-body {
+  padding: 12px 16px;
+  overflow-y: auto;
+  font-size: 15px;
 }
-@keyframes pill-blink {
-  0%   { content: ""; }
-  25%  { content: "."; }
-  50%  { content: ".."; }
-  75%  { content: "..."; }
-  100% { content: ""; }
+.game-row {
+  padding: 8px 10px;
+  margin: 4px 0;
+  border: 1px solid #e3eaf0;
+  border-radius: 8px;
+  cursor: pointer;
 }
+.game-row:hover { background: #f2f7fb; }
+.move-row {
+  padding: 5px 4px;
+  border-bottom: 1px dashed #e3eaf0;
+}
+.mv-events { color: #c0392b; font-size: 13px; }

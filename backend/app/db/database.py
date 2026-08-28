@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import json
 import os
 import sqlite3
 from datetime import datetime
@@ -122,3 +123,90 @@ def finish_game_record(game_id: str, result: str, final_fen: str) -> None:
         conn.commit()
     finally:
         conn.close()
+
+
+def remove_last_move_record(game_id: str) -> None:
+    """悔棋：删除该对局最后一轮着法记录。"""
+    conn = get_conn()
+    try:
+        conn.execute(
+            "DELETE FROM game_moves WHERE game_id=? AND id = "
+            "(SELECT MAX(id) FROM game_moves WHERE game_id=?)",
+            (game_id, game_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def clear_game_result(game_id: str) -> None:
+    """悔棋：清掉已写入的终局结果（对局回到未结束状态）。"""
+    conn = get_conn()
+    try:
+        conn.execute(
+            "UPDATE games SET result=NULL, final_fen=NULL, finished_at=NULL WHERE game_id=?",
+            (game_id,),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def decrement_move_count(game_id: str, n: int = 1) -> None:
+    """悔棋：对局手数回退。"""
+    conn = get_conn()
+    try:
+        conn.execute(
+            "UPDATE games SET move_count = MAX(move_count - ?, 0) WHERE game_id=?",
+            (n, game_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def list_games(user_id: str, limit: int = 50) -> list[dict]:
+    """棋谱库：按用户列出对局（新的在前）。"""
+    conn = get_conn()
+    try:
+        rows = conn.execute(
+            "SELECT game_id, user_id, move_count, result, created_at, finished_at "
+            "FROM games WHERE user_id=? ORDER BY created_at DESC LIMIT ?",
+            (user_id, limit),
+        ).fetchall()
+    finally:
+        conn.close()
+    return [
+        {
+            "game_id": r[0],
+            "user_id": r[1],
+            "move_count": r[2] or 0,
+            "result": r[3],
+            "created_at": r[4],
+            "finished_at": r[5],
+        }
+        for r in rows
+    ]
+
+
+def get_game_moves(game_id: str) -> list[dict]:
+    """棋谱：返回某对局的逐手记录（含双方着法与事件）。"""
+    conn = get_conn()
+    try:
+        rows = conn.execute(
+            "SELECT move_index, user_move, ai_move, fen, events FROM game_moves "
+            "WHERE game_id=? ORDER BY move_index ASC",
+            (game_id,),
+        ).fetchall()
+    finally:
+        conn.close()
+    return [
+        {
+            "move_index": r[0],
+            "user_move": json.loads(r[1]) if r[1] else None,
+            "ai_move": json.loads(r[2]) if r[2] else None,
+            "fen": r[3],
+            "events": json.loads(r[4]) if r[4] else [],
+        }
+        for r in rows
+    ]

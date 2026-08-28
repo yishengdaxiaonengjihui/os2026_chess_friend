@@ -16,15 +16,15 @@
           <option value="laozhang">老张（豪爽棋友）</option>
           <option value="xiaoya">小雅（温柔陪练）</option>
         </select>
+        <button id="btn-undo">↩ 悔棋</button>
+        <button id="btn-games">📖 棋谱库</button>
         <button id="btn-new-game">新开对局</button>
       </div>
     </header>
 
     <main class="layout">
       <section class="board-wrap">
-        <div id="board" class="board">
-          <div id="ai-thinking" class="thinking-pill hidden">🤔 AI 思考中<span class="pill-dots"></span></div>
-        </div>
+        <div id="board" class="board"></div>
         <div class="board-side">
           <div class="status" id="status">正在准备开局…</div>
           <div class="winbar">
@@ -60,8 +60,21 @@
           <h3>长期记忆</h3>
           <ul id="memories"><li class="muted">暂无</li></ul>
         </div>
+        <div class="panel-section">
+          <h3>棋谱库</h3>
+          <div id="games-list" class="muted">对局落子后自动保存</div>
+        </div>
       </aside>
     </main>
+  </div>
+  <div id="modal-mask" class="modal-mask hidden">
+    <div class="modal">
+      <div class="modal-head">
+        <span id="modal-title">棋谱库</span>
+        <button id="modal-close" class="mini-btn">关闭</button>
+      </div>
+      <div id="modal-body" class="modal-body"></div>
+    </div>
   </div>
   <script src="js/api.js"></script>
   <script src="js/chessboard.js"></script>
