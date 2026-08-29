@@ -639,23 +639,77 @@
     }
   }
 
+  // ---------------- 棋谱回放（棋盘 + 上一步/下一步） ----------------
+  function buildReplaySteps(startFen, moves) {
+    const steps = [{ fen: startFen, from: null, to: null, label: "开局", events: [] }];
+    let f = startFen;
+    for (const m of moves) {
+      if (m.user_move && m.user_move.from && m.user_move.to) {
+        f = applyLocalMove(f, m.user_move.from, m.user_move.to);
+        steps.push({
+          fen: f,
+          from: m.user_move.from,
+          to: m.user_move.to,
+          label: (m.user_move.piece_name || m.user_move.piece) + " " + m.user_move.from + "→" + m.user_move.to,
+          events: [],
+        });
+      }
+      if (m.ai_move && m.ai_move.from_sq && m.ai_move.to_sq) {
+        f = applyLocalMove(f, m.ai_move.from_sq, m.ai_move.to_sq);
+        steps.push({
+          fen: f,
+          from: m.ai_move.from_sq,
+          to: m.ai_move.to_sq,
+          label: "AI " + m.ai_move.from_sq + "→" + m.ai_move.to_sq,
+          events: m.events || [],
+        });
+      }
+    }
+    return steps;
+  }
+
   async function showGameMoves(gameId) {
-    el.modalTitle.textContent = "棋谱 " + gameId;
-    el.modalBody.innerHTML = "<div class='muted'>加载中…</div>";
+    el.modalTitle.textContent = "棋谱回放 " + gameId;
+    el.modalBody.innerHTML =
+      "<div class='replay-board-box'><div id='replay-board' class='board'></div></div>" +
+      "<div class='replay-info' id='replay-info'>加载中…</div>" +
+      "<div class='replay-nav'>" +
+      "<button id='rp-first' disabled>⏮ 开局</button>" +
+      "<button id='rp-prev' disabled>◀ 上一步</button>" +
+      "<button id='rp-next' disabled>下一步 ▶</button>" +
+      "<button id='rp-last' disabled>终局 ⏭</button>" +
+      "</div><div class='replay-events' id='replay-events'></div>";
     el.modalMask.classList.remove("hidden");
     try {
       const res = await API.gameMoves(gameId);
-      if (!res.moves || res.moves.length === 0) {
-        el.modalBody.innerHTML = "<div class='muted'>暂无着法记录</div>";
-        return;
+      const startFen = res.start_fen || "rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1";
+      const steps = buildReplaySteps(startFen, res.moves || []);
+      const replay = { board: new ChessBoard(document.getElementById("replay-board")), steps: steps, step: 0 };
+      const info = document.getElementById("replay-info");
+      const evts = document.getElementById("replay-events");
+      const bFirst = document.getElementById("rp-first");
+      const bPrev = document.getElementById("rp-prev");
+      const bNext = document.getElementById("rp-next");
+      const bLast = document.getElementById("rp-last");
+      function renderStep() {
+        const i = replay.step;
+        const s = replay.steps[i];
+        replay.board.setFen(s.fen);
+        if (s.from && s.to) replay.board.markAiMove(s.from, s.to);
+        info.textContent = "第 " + i + " 步 / 共 " + (steps.length - 1) + " 步 · " + s.label;
+        evts.innerHTML = s.events && s.events.length
+          ? s.events.map(function (e) { return "<div>· " + e + "</div>"; }).join("")
+          : "<div class='muted'>（无事件）</div>";
+        bFirst.disabled = i === 0;
+        bPrev.disabled = i === 0;
+        bNext.disabled = i >= steps.length - 1;
+        bLast.disabled = i >= steps.length - 1;
       }
-      const rows = res.moves.map(function (m) {
-        const um = m.user_move ? (m.user_move.piece_name || m.user_move.piece) + " " + m.user_move.from + "→" + m.user_move.to : "";
-        const am = (m.ai_move && m.ai_move.from_sq) ? " · 黑 " + m.ai_move.from_sq + "→" + m.ai_move.to_sq : "";
-        const ev = (m.events && m.events.length) ? "<span class='mv-events'>" + m.events.join("；") + "</span>" : "";
-        return "<div class='move-row'>第" + m.move_index + "手 " + um + am + ev + "</div>";
-      }).join("");
-      el.modalBody.innerHTML = rows;
+      bFirst.addEventListener("click", function () { replay.step = 0; renderStep(); });
+      bPrev.addEventListener("click", function () { if (replay.step > 0) { replay.step--; renderStep(); } });
+      bNext.addEventListener("click", function () { if (replay.step < replay.steps.length - 1) { replay.step++; renderStep(); } });
+      bLast.addEventListener("click", function () { replay.step = replay.steps.length - 1; renderStep(); });
+      renderStep();
     } catch (err) {
       el.modalBody.innerHTML = "<div class='muted'>棋谱加载失败：" + esc(err.message) + "</div>";
     }

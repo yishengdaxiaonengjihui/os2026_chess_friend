@@ -45,6 +45,7 @@ from ..db.database import (
     delete_user as delete_user_db,
     finish_game_record,
     get_game_moves,
+    get_game_start_fen,
     get_user,
     init_db,
     list_games,
@@ -539,8 +540,12 @@ def list_user_games(user_id: str) -> GamesListResponse:
 
 @router.get("/api/games/{game_id}/moves")
 def user_game_moves(game_id: str) -> dict:
-    """棋谱库：返回某对局的逐手记录。"""
-    return {"game_id": game_id, "moves": get_game_moves(game_id)}
+    """棋谱库：返回某对局的逐手记录（含开局 FEN，供前端回放）。"""
+    return {
+        "game_id": game_id,
+        "start_fen": get_game_start_fen(game_id),
+        "moves": get_game_moves(game_id),
+    }
 
 
 @router.post("/api/interrupt")

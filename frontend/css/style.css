@@ -360,3 +360,18 @@ body {
 .model-row:hover { background: #eef4f9; }
 .tag { background: #1f5b8b; color: #fff; font-size: 12px; padding: 2px 8px; border-radius: 8px; }
 
+
+/* ---- 通用隐藏（修复：对局室在主界面误显示等一切 .hidden 场景）---- */
+.hidden { display: none !important; }
+
+/* ---- 棋谱回放 ---- */
+.replay-board-box { width: min(440px, 86vw); margin: 0 auto; }
+.replay-info { text-align: center; font-size: 18px; font-weight: 700; margin: 10px 0 4px; color: #1f5b8b; }
+.replay-nav { display: flex; gap: 10px; justify-content: center; margin-top: 8px; }
+.replay-nav button {
+  flex: 1; max-width: 132px; padding: 12px 0; font-size: 17px;
+  border: 1px solid #b9c6d0; border-radius: 10px; background: #f2f6f9; cursor: pointer;
+}
+.replay-nav button:hover { background: #e4edf4; }
+.replay-nav button:disabled { opacity: .45; cursor: default; }
+.replay-events { margin-top: 10px; max-height: 120px; overflow-y: auto; font-size: 15px; color: #7a5230; }

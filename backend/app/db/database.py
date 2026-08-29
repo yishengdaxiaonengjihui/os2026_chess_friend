@@ -299,6 +299,16 @@ def list_games(user_id: str, limit: int = 200) -> list[dict]:
     ]
 
 
+def get_game_start_fen(game_id: str) -> str | None:
+    """棋谱回放：取该对局的开局 FEN。"""
+    conn = get_conn()
+    try:
+        row = conn.execute("SELECT start_fen FROM games WHERE game_id=?", (game_id,)).fetchone()
+    finally:
+        conn.close()
+    return row[0] if row else None
+
+
 def get_game_moves(game_id: str) -> list[dict]:
     """棋谱：返回某对局的逐手记录（含双方着法与事件）。"""
     conn = get_conn()
