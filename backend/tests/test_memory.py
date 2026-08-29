@@ -56,3 +56,35 @@ def test_profile_stats_accumulate(tmp_path):
     store.merge_diff("u-acc", {"stats": stats2})
     stored2 = store.get("u-acc")["stats"]
     assert stored2["games"] == 2 and stored2["wins"] == 1 and stored2["losses"] == 1
+
+def test_detect_personal_info():
+    """问题9：个人信息识别——仅主动透露个人生活信息时判定为可写入长期记忆。"""
+    from backend.app.core.memory_manager import detect_personal_info
+
+    assert detect_personal_info("我今年七十五了，喜欢下棋") is not None
+    assert detect_personal_info("我孙子可淘气了") is not None
+    assert detect_personal_info("这一步走得挺稳") is None
+    assert detect_personal_info("") is None
+    assert detect_personal_info(None) is None
+
+
+def test_interrupt_with_personal_info_writes_long_term():
+    """问题9：打断时用户主动透露个人信息 -> 写入长期记忆；普通棋局点评不写。"""
+    from fastapi.testclient import TestClient
+
+    from backend.app.api import routes
+    from backend.app.config import get_settings
+    from backend.app.core.memory_manager import LongTermMemory
+    from backend.app.main import app
+
+    client = TestClient(app)
+    g = client.post("/api/games", json={"user_id": "u-pi"}).json()
+    r = client.post(
+        "/api/interrupt",
+        json={"game_id": g["game_id"], "user_id": "u-pi", "transcript": "我今年七十五了，平时喜欢下棋"},
+    )
+    assert r.status_code == 200
+    ltm = LongTermMemory("u-pi", db_path=get_settings().sqlite_path)
+    hits = ltm.search("下棋")
+    assert any("我今年七十五" in h for h in hits)
+    routes._sessions.pop(g["game_id"], None)

@@ -185,6 +185,25 @@ class ProfileStore:
             c.execute("DELETE FROM profiles WHERE user_id=?", (user_id,))
 
 
+# 问题9：长期记忆写入管控 —— 只有「整局摘要」与「用户主动透露个人信息」两个场景写 Mem0。
+# 对局中的临时点评只进本局短期内存。这里做个人信息轻量识别。
+_PERSONAL_KEYWORDS = [
+    "我今年", "我退休", "我老伴", "我孙子", "我孙女", "我儿子", "我女儿", "我孩子",
+    "我喜欢", "我爱", "我平时", "我习惯", "我身体", "我膝盖", "我血压",
+    "我睡不着", "我心情", "我最近", "我们家", "我叫", "我是",
+]
+
+
+def detect_personal_info(text: str) -> Optional[str]:
+    """识别用户主动透露的个人生活 / 爱好 / 情绪信息；命中返回规范化记忆文本，否则 None。"""
+    if not text:
+        return None
+    for kw in _PERSONAL_KEYWORDS:
+        if kw in text:
+            return f"用户主动提及：{text.strip()[:60]}"
+    return None
+
+
 class MemoryManager:
     """对外总入口：把三层记忆统一暴露给编排层。"""
 

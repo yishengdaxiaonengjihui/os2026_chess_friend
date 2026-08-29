@@ -29,6 +29,7 @@ from ..core import (
 )
 from ..core.chess_engine import ai_move, legal_moves, position_status, score_to_win_prob
 from ..core.term_filter import sanitize_speech
+from ..core.memory_manager import detect_personal_info
 from ..core.model_registry import get_runtime_model, list_models, set_runtime_model
 from ..core.game_stats import (
     build_game_summary,
@@ -111,7 +112,6 @@ def _new_session(
         "move_index": 0,
         "game_over": False,
         "stats": stats,
-        "capture_noted": False,  # 本局是否已为首次吃子写过长期记忆
         "memory": memory,
         "dispatcher": AvatarDispatcher(),
         "ai_opening": None,  # 执黑时 AI(红) 的首着
@@ -356,13 +356,7 @@ def make_move(req: MoveRequest) -> MoveResponse:
         sess["memory"].long_term.add(summary, metadata={"type": "game_summary", "game_id": sess["game_id"], "result": result})
         finish_game_record(sess["game_id"], result, ai_new_fen)
         logger.info("对局结束 game_id=%s result=%s", sess["game_id"], result)
-    elif user_move.captured and not sess["capture_noted"]:
-        # 本局首次吃子：写一条长期记忆，让「长期记忆」面板在对局中就开始填充
-        sess["capture_noted"] = True
-        sess["memory"].long_term.add(
-            f"用户在第{sess['move_index']}手用{user_move.piece_name}吃掉对方{user_move.captured_name}，吃子主动、敢于交换。",
-            metadata={"type": "capture", "game_id": sess["game_id"]},
-        )
+    # 问题9：对局中的临时点评/吃子不写长期记忆，仅在整局结束生成摘要时写入（见上）。
 
     # 8) 分层记忆召回
     sess["memory"].remember_turn("user", f"玩家走 {user_move.to_dict()}")
@@ -421,12 +415,14 @@ def get_legal_moves(fen: str, color: str = "red") -> dict:
 
 @router.post("/api/games/{game_id}/personality")
 def set_personality(game_id: str, req: PersonalityRequest) -> dict:
-    """切换棋友人格：更新 LLM 人设，并清空本局聊天记忆让新人格重新开始。"""
+    """切换棋友人格（问题7：对局一旦开始全程锁定，仅开局前 new_game 时可选）。"""
     sess = _sessions.get(game_id)
     if not sess:
         raise HTTPException(status_code=404, detail="game_id 不存在")
     if req.personality not in ("laozhang", "xiaoya"):
         raise HTTPException(status_code=400, detail="人格必须是 laozhang 或 xiaoya")
+    if sess["move_index"] > 0 or sess["game_over"]:
+        raise HTTPException(status_code=400, detail="对局已开始，棋友人格已锁定，请新开对局再选择棋友")
     sess["personality"] = req.personality
     sess["memory"].short_term.clear()
     return {"status": "ok", "personality": req.personality, "game_id": game_id}
@@ -560,6 +556,10 @@ def interrupt(req: InterruptRequest) -> dict:
         raise HTTPException(status_code=404, detail="game_id 不存在")
     sess["dispatcher"].interrupt()
     sess["memory"].remember_turn("user", f"（用户打断）{req.transcript}")
+    # 问题9：仅用户主动透露个人信息时写入长期记忆
+    personal = detect_personal_info(req.transcript)
+    if personal:
+        sess["memory"].long_term.add(personal, metadata={"type": "personal", "game_id": sess["game_id"]})
     return {"status": "interrupted", "queue_cleared": True}
 
 
