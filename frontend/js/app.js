@@ -23,6 +23,7 @@
     setPersonality: document.getElementById("set-personality"),
     setStrength: document.getElementById("set-strength"),
     btnStartGame: document.getElementById("btn-start-game"),
+    menuArea: document.getElementById("menu-area"),
     gameSettings: document.getElementById("game-settings"),
     gameLayout: document.getElementById("game-layout"),
     btnBackMenu: document.getElementById("btn-back-menu"),
@@ -59,6 +60,7 @@
     modalTitle: document.getElementById("modal-title"),
     modalBody: document.getElementById("modal-body"),
     modalClose: document.getElementById("modal-close"),
+    modalBack: document.getElementById("modal-back"),
   };
 
   const AVATARS = { laozhang: ["🧓", "老张"], xiaoya: ["👩", "小雅"] };
@@ -170,9 +172,16 @@
   }
 
   // ---------------- 对局设置 / 开始对局 ----------------
-  function showSettingsForm() { el.gameSettings.classList.remove("hidden"); el.gameLayout.classList.add("hidden"); }
-  function showGame() { el.gameSettings.classList.add("hidden"); el.gameLayout.classList.remove("hidden"); }
-  function initStartTab() { if (state.game) showGame(); else showSettingsForm(); }
+  // 开始对局页 = 只有「对局设置 + 开始对局」；对局室整页独立，点开始对局才出现
+  function showSettingsForm() {
+    el.gameLayout.classList.add("hidden");
+    el.menuArea.classList.remove("hidden");
+  }
+  function showGameRoom() {
+    el.menuArea.classList.add("hidden");
+    el.gameLayout.classList.remove("hidden");
+  }
+  function initStartTab() { showSettingsForm(); }
   function yourTurnText() { return state.userSide === "black" ? "该你走棋（黑方）" : "该你走棋（红方）"; }
 
   function updateWinbarLabels() {
@@ -186,7 +195,7 @@
   }
 
   el.btnStartGame.addEventListener("click", newGame);
-  el.btnBackMenu.addEventListener("click", function () { showSettingsForm(); });
+  el.btnBackMenu.addEventListener("click", function () { showTab("start"); });
   document.querySelectorAll(".tab").forEach(function (t) {
     t.addEventListener("click", function () { showTab(t.dataset.tab); });
   });
@@ -211,7 +220,7 @@
       state.board.clearSelection();
       state.board.setFen(game.fen);
       updateWinbarLabels();
-      showGame();
+      showGameRoom();
       if (game.ai_opening && game.ai_opening.from_sq) {
         state.board.markAiMove(game.ai_opening.from_sq, game.ai_opening.to_sq);
         addEvent("AI(红) 先行：" + game.ai_opening.from_sq + "→" + game.ai_opening.to_sq);
@@ -763,6 +772,7 @@
   }
 
   // ---------------- 模态 ----------------
+  el.modalBack.addEventListener("click", function () { el.modalMask.classList.add("hidden"); });
   el.modalClose.addEventListener("click", function () { el.modalMask.classList.add("hidden"); });
   el.modalMask.addEventListener("click", function (e) {
     if (e.target === el.modalMask) el.modalMask.classList.add("hidden");

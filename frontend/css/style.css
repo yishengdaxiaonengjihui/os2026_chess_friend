@@ -375,3 +375,8 @@ body {
 .replay-nav button:hover { background: #e4edf4; }
 .replay-nav button:disabled { opacity: .45; cursor: default; }
 .replay-events { margin-top: 10px; max-height: 120px; overflow-y: auto; font-size: 15px; color: #7a5230; }
+
+/* ---- 弹窗头部操作区 ---- */
+.modal-head-actions { display: flex; gap: 8px; align-items: center; }
+.primary-btn.sm { padding: 7px 14px; font-size: 14px; border-radius: 8px; }
+
