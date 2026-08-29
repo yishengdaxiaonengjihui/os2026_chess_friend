@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     # ---- 降级开关：关闭数字人后保留其余全部业务 ----
     enable_digital_human: bool = True
 
+    # ---- 言语触发决策（问题1）：默认开启“落子不一定说话”；测试环境关闭保确定性 ----
+    speech_trigger_enabled: bool = True
+
     # ---- 象棋引擎（ryoi/xiangqi logic.js，vendor 内置）----
     engine_skill: int = 3          # 1(易)..6(难)
     engine_time_ms: int = 0        # 0=引擎默认时间预算

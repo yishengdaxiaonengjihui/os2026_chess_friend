@@ -116,6 +116,13 @@ class AvatarDispatcher:
         self._interrupted = False
         self.state = AvatarState.IDLE
 
+    def think_only(self) -> None:
+        """静默思索（问题1）：只广播 thinking 状态，不入队语音。"""
+        if not self.enabled:
+            return
+        self.state = AvatarState.THINKING
+        self._emit("thinking")
+
     # ---- 驱动 ----
     def _schedule_drive(self) -> None:
         """在运行中的事件循环上调度后台驱动（尽力而为）。"""

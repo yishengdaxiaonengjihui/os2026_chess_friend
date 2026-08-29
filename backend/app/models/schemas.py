@@ -69,7 +69,7 @@ class MoveResponse(BaseModel):
     ai_move: dict[str, Any]
     new_fen: str
     events: list[str]
-    llm_output: LLMOutput
+    llm_output: Optional[LLMOutput] = None  # 问题1：言语触发决策后可能静默（不发言）
     avatar_command: Optional[dict[str, Any]] = None
     long_term_memories: list[str]
     profile: dict[str, Any]

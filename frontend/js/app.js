@@ -478,15 +478,24 @@
       for (const e of resp.events) addEvent(e);
 
       const llm = resp.llm_output;
-      el.speech.textContent = llm.speech_text;
+      if (llm) {
+        el.speech.textContent = llm.speech_text;
+        el.emotionChip.textContent = "情绪 " + llm.emotion_tag;
+        el.actionChip.textContent = "动作 " + llm.action_tag;
+      } else {
+        // 问题1：言语触发决策后 AI 静默思索，只播思考动画
+        el.speech.textContent = "…";
+        el.emotionChip.textContent = "情绪 平静";
+        el.actionChip.textContent = "动作 思考";
+      }
       if (resp.avatar_command) {
         if (avatarAdapter) avatarAdapter.speak(resp.avatar_command);
         else setDhState("speaking");
-      } else {
+      } else if (llm) {
         setDhState("off");
+      } else {
+        setDhState("thinking");
       }
-      el.emotionChip.textContent = "情绪 " + llm.emotion_tag;
-      el.actionChip.textContent = "动作 " + llm.action_tag;
       if (resp.ai_move && typeof resp.ai_move.win_probability === "number") {
         const userWin = (1 - resp.ai_move.win_probability) * 100;
         el.winFill.style.width = Math.max(2, Math.min(98, userWin)) + "%";

@@ -8,6 +8,7 @@ from __future__ import annotations
 import copy
 import json
 import logging
+import time
 import uuid
 
 from fastapi import APIRouter, HTTPException
@@ -30,6 +31,7 @@ from ..core import (
 from ..core.chess_engine import ai_move, legal_moves, position_status, score_to_win_prob
 from ..core.term_filter import sanitize_speech
 from ..core.memory_manager import detect_personal_info
+from ..core.speech_trigger_decider import classify_strength, should_speak
 from ..core.model_registry import get_runtime_model, list_models, set_runtime_model
 from ..core.game_stats import (
     build_game_summary,
@@ -112,6 +114,10 @@ def _new_session(
         "move_index": 0,
         "game_over": False,
         "stats": stats,
+        # 问题1：言语触发决策状态（冷却 + 静默计数 + 上一步胜率）
+        "last_speech_ts": None,
+        "silent_streak": 0,
+        "prev_win_prob": None,
         "memory": memory,
         "dispatcher": AvatarDispatcher(),
         "ai_opening": None,  # 执黑时 AI(红) 的首着
@@ -367,26 +373,48 @@ def make_move(req: MoveRequest) -> MoveResponse:
     diff["stats"] = stats
     profile = sess["memory"].profile_store.merge_diff(sess["user_id"], diff)
 
-    # 10) 五层 Prompt -> LLM（强约束 JSON）
-    messages = build_prompt(
-        profile=profile,
-        long_term_memories=recall["long_term"],
-        board_context=ctx,
-        short_term_history=recall["short_term"],
-        system_role=system_role_for(sess["personality"]),
+    # 10) 言语触发决策（问题1：取消“落子=必说话”）+ 五层 Prompt -> LLM（强约束 JSON）
+    is_strong = classify_strength(
+        events=events,
+        user_move_captured=bool(user_move.captured),
+        ai_move_captured=bool(ai_move_obj and ai_move_obj.captured),
+        win_probability=user_win_prob,
+        prev_win_probability=sess.get("prev_win_prob"),
     )
-    llm_out = _llm.chat(messages)
-    # 问题5：第四层正则兜底，彻底清除坐标/记谱等机械话术
-    llm_out["speech_text"] = sanitize_speech(llm_out["speech_text"])
-    sess["memory"].remember_turn("assistant", llm_out["speech_text"])
-
-    # 11) 具身指令分发
-    cmd = PerformanceCommand(
-        speech_text=llm_out["speech_text"],
-        emotion_tag=llm_out["emotion_tag"],
-        action_tag=llm_out["action_tag"],
-    )
-    avatar_cmd = sess["dispatcher"].play_sync(cmd)
+    sess["prev_win_prob"] = user_win_prob
+    speak_now = True
+    if _settings.speech_trigger_enabled:
+        speak_now = should_speak(
+            is_strong=is_strong,
+            last_speech_ts=sess.get("last_speech_ts"),
+            silent_streak=sess.get("silent_streak", 0),
+        )
+    if speak_now:
+        messages = build_prompt(
+            profile=profile,
+            long_term_memories=recall["long_term"],
+            board_context=ctx,
+            short_term_history=recall["short_term"],
+            system_role=system_role_for(sess["personality"]),
+        )
+        llm_out = _llm.chat(messages)
+        # 问题5：第四层正则兜底，彻底清除坐标/记谱等机械话术
+        llm_out["speech_text"] = sanitize_speech(llm_out["speech_text"])
+        sess["memory"].remember_turn("assistant", llm_out["speech_text"])
+        # 11) 具身指令分发
+        cmd = PerformanceCommand(
+            speech_text=llm_out["speech_text"],
+            emotion_tag=llm_out["emotion_tag"],
+            action_tag=llm_out["action_tag"],
+        )
+        avatar_cmd = sess["dispatcher"].play_sync(cmd)
+        sess["last_speech_ts"] = time.time()
+        sess["silent_streak"] = 0
+    else:
+        # 静默思索：不调 LLM，只广播数字人思考动画
+        llm_out = None
+        avatar_cmd = sess["dispatcher"].think_only()
+        sess["silent_streak"] = sess.get("silent_streak", 0) + 1
 
     # 12) 落盘棋谱 + 对局事件广播（供前端实时感知）
     append_move_record(sess["game_id"], sess["move_index"], user_move.to_dict(), engine_res, ai_new_fen, events)
@@ -400,7 +428,7 @@ def make_move(req: MoveRequest) -> MoveResponse:
         ai_move=engine_res,
         new_fen=ai_new_fen,
         events=events,
-        llm_output=LLMOutput(**llm_out),
+        llm_output=LLMOutput(**llm_out) if llm_out else None,
         avatar_command=avatar_cmd,
         long_term_memories=recall["long_term"],
         profile=profile,
