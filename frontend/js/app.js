@@ -27,6 +27,17 @@
     gameSettings: document.getElementById("game-settings"),
     gameLayout: document.getElementById("game-layout"),
     btnBackMenu: document.getElementById("btn-back-menu"),
+    // 棋谱回放（整页视图）
+    replayView: document.getElementById("replay-view"),
+    replayBoard: document.getElementById("replay-board"),
+    replayStatus: document.getElementById("replay-status"),
+    replayInfo: document.getElementById("replay-info"),
+    replayEvents: document.getElementById("replay-events"),
+    rpFirst: document.getElementById("rp-first"),
+    rpPrev: document.getElementById("rp-prev"),
+    rpNext: document.getElementById("rp-next"),
+    rpLast: document.getElementById("rp-last"),
+    btnReplayBack: document.getElementById("btn-replay-back"),
     // 对局
     board: document.getElementById("board"),
     status: document.getElementById("status"),
@@ -631,7 +642,7 @@
           "<button class='mini-btn' data-act='view'>查看</button>" +
           "<button class='mini-btn' data-act='star'>" + (g.starred ? "取消加精" : "加精") + "</button>" +
           "<button class='mini-btn danger-btn' data-act='del'>删除</button>";
-        row.querySelector("[data-act=view]").addEventListener("click", function () { showGameMoves(g.game_id); });
+        row.querySelector("[data-act=view]").addEventListener("click", function () { viewRecord(g.game_id); });
         row.querySelector("[data-act=star]").addEventListener("click", async function () {
           try { await API.starGame(g.game_id, !g.starred); renderRecords(); }
           catch (e) { alert("加精失败：" + e.message); }
@@ -648,7 +659,9 @@
     }
   }
 
-  // ---------------- 棋谱回放（棋盘 + 上一步/下一步） ----------------
+  // ---------------- 棋谱回放（整页对局室样式：棋盘 + 上一手/下一手 + 返回） ----------------
+  let replay = null; // { board, steps, step }
+
   function buildReplaySteps(startFen, moves) {
     const steps = [{ fen: startFen, from: null, to: null, label: "开局", events: [] }];
     let f = startFen;
@@ -677,52 +690,49 @@
     return steps;
   }
 
-  async function showGameMoves(gameId) {
-    el.modalTitle.textContent = "棋谱回放 " + gameId;
-    el.modalBody.innerHTML =
-      "<div class='replay-board-box'><div id='replay-board' class='board'></div></div>" +
-      "<div class='replay-info' id='replay-info'>加载中…</div>" +
-      "<div class='replay-nav'>" +
-      "<button id='rp-first' disabled>⏮ 开局</button>" +
-      "<button id='rp-prev' disabled>◀ 上一步</button>" +
-      "<button id='rp-next' disabled>下一步 ▶</button>" +
-      "<button id='rp-last' disabled>终局 ⏭</button>" +
-      "</div><div class='replay-events' id='replay-events'></div>";
-    el.modalMask.classList.remove("hidden");
+  function renderReplayStep() {
+    const i = replay.step;
+    const s = replay.steps[i];
+    replay.board.setFen(s.fen);
+    if (s.from && s.to) replay.board.markAiMove(s.from, s.to);
+    el.replayInfo.textContent = "第 " + i + " 步 / 共 " + (replay.steps.length - 1) + " 步 · " + s.label;
+    el.replayEvents.innerHTML = s.events && s.events.length
+      ? s.events.map(function (e) { return "<div>· " + e + "</div>"; }).join("")
+      : "<div class='muted'>（无事件）</div>";
+    el.rpFirst.disabled = i === 0;
+    el.rpPrev.disabled = i === 0;
+    el.rpNext.disabled = i >= replay.steps.length - 1;
+    el.rpLast.disabled = i >= replay.steps.length - 1;
+  }
+
+  async function viewRecord(gameId) {
+    // 整页变成对局室样式的棋谱回放
+    el.replayStatus.textContent = "棋谱回放";
+    el.replayInfo.textContent = "加载中…";
+    el.menuArea.classList.add("hidden");
+    el.replayView.classList.remove("hidden");
     try {
       const res = await API.gameMoves(gameId);
       const startFen = res.start_fen || "rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1";
       const steps = buildReplaySteps(startFen, res.moves || []);
-      const replay = { board: new ChessBoard(document.getElementById("replay-board")), steps: steps, step: 0 };
-      const info = document.getElementById("replay-info");
-      const evts = document.getElementById("replay-events");
-      const bFirst = document.getElementById("rp-first");
-      const bPrev = document.getElementById("rp-prev");
-      const bNext = document.getElementById("rp-next");
-      const bLast = document.getElementById("rp-last");
-      function renderStep() {
-        const i = replay.step;
-        const s = replay.steps[i];
-        replay.board.setFen(s.fen);
-        if (s.from && s.to) replay.board.markAiMove(s.from, s.to);
-        info.textContent = "第 " + i + " 步 / 共 " + (steps.length - 1) + " 步 · " + s.label;
-        evts.innerHTML = s.events && s.events.length
-          ? s.events.map(function (e) { return "<div>· " + e + "</div>"; }).join("")
-          : "<div class='muted'>（无事件）</div>";
-        bFirst.disabled = i === 0;
-        bPrev.disabled = i === 0;
-        bNext.disabled = i >= steps.length - 1;
-        bLast.disabled = i >= steps.length - 1;
-      }
-      bFirst.addEventListener("click", function () { replay.step = 0; renderStep(); });
-      bPrev.addEventListener("click", function () { if (replay.step > 0) { replay.step--; renderStep(); } });
-      bNext.addEventListener("click", function () { if (replay.step < replay.steps.length - 1) { replay.step++; renderStep(); } });
-      bLast.addEventListener("click", function () { replay.step = replay.steps.length - 1; renderStep(); });
-      renderStep();
+      replay = { board: new ChessBoard(el.replayBoard), steps: steps, step: 0 };
+      renderReplayStep();
     } catch (err) {
-      el.modalBody.innerHTML = "<div class='muted'>棋谱加载失败：" + esc(err.message) + "</div>";
+      el.replayInfo.textContent = "棋谱加载失败：" + err.message;
     }
   }
+
+  function closeReplay() {
+    el.replayView.classList.add("hidden");
+    el.menuArea.classList.remove("hidden");
+    showTab("records");
+  }
+
+  el.rpFirst.addEventListener("click", function () { if (replay) { replay.step = 0; renderReplayStep(); } });
+  el.rpPrev.addEventListener("click", function () { if (replay && replay.step > 0) { replay.step--; renderReplayStep(); } });
+  el.rpNext.addEventListener("click", function () { if (replay && replay.step < replay.steps.length - 1) { replay.step++; renderReplayStep(); } });
+  el.rpLast.addEventListener("click", function () { if (replay) { replay.step = replay.steps.length - 1; renderReplayStep(); } });
+  el.btnReplayBack.addEventListener("click", closeReplay);
 
   // ---------------- 通用设置 ----------------
   async function renderSettings() {

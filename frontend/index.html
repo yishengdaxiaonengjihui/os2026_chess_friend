@@ -157,6 +157,32 @@
         </div>
       </aside>
     </section>
+
+    <!-- 棋谱回放：整页对局室样式。查看棋谱时出现，支持上一手/下一手/返回 -->
+    <section id="replay-view" class="layout hidden">
+      <section class="board-wrap">
+        <div id="replay-board" class="board"></div>
+        <div class="board-side">
+          <div class="status" id="replay-status">棋谱回放</div>
+          <div class="replay-nav">
+            <button id="rp-first" class="primary-btn sm">⏮ 开局</button>
+            <button id="rp-prev" class="primary-btn sm">◀ 上一手</button>
+            <button id="rp-next" class="primary-btn sm">下一手 ▶</button>
+            <button id="rp-last" class="primary-btn sm">终局 ⏭</button>
+          </div>
+        </div>
+      </section>
+      <aside class="companion">
+        <div class="panel-section">
+          <h3>棋谱回放</h3>
+          <div id="replay-info" class="replay-info"></div>
+          <div id="replay-events" class="replay-events"></div>
+        </div>
+        <div class="panel-section">
+          <button id="btn-replay-back" class="primary-btn big">← 返回棋谱列表</button>
+        </div>
+      </aside>
+    </section>
   </div>
 
   <!-- 查看棋谱模态（可回放棋盘） -->
