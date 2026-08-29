@@ -24,7 +24,9 @@ _HARD_REQS = (
     "3. 台词用口语化的中文，简短（不超过 40 字），像棋友在耳边说话。\n"
     "4. emotion_tag 只能取以下枚举之一：" + "、".join(EMOTIONS) + "。\n"
     "5. action_tag 只能取以下枚举之一：" + "、".join(ACTIONS) + "。\n"
-    '6. 输出 JSON 结构严格为 {"speech_text": "...", "emotion_tag": "...", "action_tag": "..."}。'
+    '6. 输出 JSON 结构严格为 {"speech_text": "...", "emotion_tag": "...", "action_tag": "..."}。\n'
+    "7. 绝对禁止输出任何棋盘坐标（如 a7、b6）、任何专业象棋记谱（如炮二平五、马三进四），"
+    "也禁止使用“从X走到Y”这类机械描述。用普通老人的口语描述棋局（比如“这一步走得稳”、“吃了个子”）。"
 )
 
 # 人格 -> 系统角色（切换人格后 LLM 按对应人设说话）
@@ -76,12 +78,15 @@ def _stats_to_text(stats: dict) -> str:
 def _board_to_text(ctx: dict[str, Any]) -> str:
     """把结构化博弈上下文转成可读文本（刻意剥离原始 FEN）。"""
     lines = []
+    # 问题5：只把人工翻译后的通俗口语事件送入 Prompt，绝不输出坐标/记谱
     if ctx.get("user_move"):
         m = ctx["user_move"]
-        lines.append(f"玩家刚刚：{m['piece_name']}从{m['from']}走到{m['to']}" + (f"，吃掉对方{m['captured_name']}" if m.get("captured_name") else ""))
+        cap = f"，还吃掉了对方的{m['captured_name']}" if m.get("captured_name") else ""
+        lines.append(f"玩家刚刚动了一步{m['piece_name']}{cap}")
     if ctx.get("ai_move"):
         m = ctx["ai_move"]
-        lines.append(f"你应了一手：{m['piece_name']}从{m['from']}走到{m['to']}" + (f"，吃掉对方{m['captured_name']}" if m.get("captured_name") else ""))
+        cap = f"，还吃掉了玩家的{m['captured_name']}" if m.get("captured_name") else ""
+        lines.append(f"你应了一手：走了一步{m['piece_name']}{cap}")
     if ctx.get("material_text"):
         lines.append("当前子力：" + ctx["material_text"])
     if ctx.get("events"):

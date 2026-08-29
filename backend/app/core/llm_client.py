@@ -6,9 +6,12 @@
 from __future__ import annotations
 
 import json
+import logging
 import random
 import re
 from typing import Any, Optional
+
+logger = logging.getLogger(__name__)
 
 from ..config import get_settings
 from .model_registry import effective_model
@@ -24,6 +27,19 @@ MOCK_LINES = [
 
 class LLMOutputError(ValueError):
     """LLM 输出无法解析为合法结构。"""
+
+
+# 问题10：LLM 输出异常 / 解析失败时的预设安全兜底（中性情绪 + 默认动作，绝不抛错）
+SAFE_FALLBACK_TEXT = "这一步我好好琢磨琢磨，老哥你先稳着下。"
+
+
+def _safe_fallback_reply() -> dict[str, Any]:
+    """LLM 输出异常时的兜底：预设安全台词 + 中性情绪 + 默认思考动作。"""
+    return {
+        "speech_text": SAFE_FALLBACK_TEXT,
+        "emotion_tag": "平静",
+        "action_tag": "nod",
+    }
 
 
 def _parse_llm_json(text: str) -> dict[str, Any]:
@@ -92,33 +108,40 @@ class LLMClient:
         return self._client is None
 
     def chat(self, messages: list[dict], max_retries: int = 2) -> dict[str, Any]:
-        if self._client is None:
-            return _mock_reply(messages)
+        # 最终防线：任何异常都降级到安全兜底，保证对局/演示绝不中断
+        try:
+            if self._client is None:
+                return _mock_reply(messages)
 
-        default_model = self.settings.llm_model
-        # 模型顺序：运行时选择模型 -> 配置默认模型（运行时模型失败时回退）
-        models = [effective_model(default_model)]
-        if models[0] != default_model:
-            models.append(default_model)
+            default_model = self.settings.llm_model
+            # 模型顺序：运行时选择模型 -> 配置默认模型（运行时模型失败时回退）
+            models = [effective_model(default_model)]
+            if models[0] != default_model:
+                models.append(default_model)
 
-        last_err: Optional[Exception] = None
-        for model in models:
-            for _ in range(max_retries + 1):
-                try:
-                    kwargs: dict[str, Any] = {
-                        "model": model,
-                        "messages": messages,
-                        "max_tokens": self.settings.llm_max_tokens,
-                        "temperature": self.settings.llm_temperature,
-                        "response_format": {"type": "json_object"},
-                    }
-                    if self.settings.llm_thinking_off:
-                        kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
-                    resp = self._client.chat.completions.create(**kwargs)
-                    raw = resp.choices[0].message.content or ""
-                    obj = _validate(_parse_llm_json(raw))
-                    return obj
-                except Exception as e:  # 网络/解析/限流都重试
-                    last_err = e
-        # 全部重试失败：mock 兜底，保证服务不挂
-        return _mock_reply(messages)
+            last_err: Optional[Exception] = None
+            for model in models:
+                for _ in range(max_retries + 1):
+                    try:
+                        kwargs: dict[str, Any] = {
+                            "model": model,
+                            "messages": messages,
+                            "max_tokens": self.settings.llm_max_tokens,
+                            "temperature": self.settings.llm_temperature,
+                            "response_format": {"type": "json_object"},
+                        }
+                        if self.settings.llm_thinking_off:
+                            kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
+                        resp = self._client.chat.completions.create(**kwargs)
+                        raw = resp.choices[0].message.content or ""
+                        obj = _validate(_parse_llm_json(raw))
+                        return obj
+                    except Exception as e:  # 网络/解析/限流都重试
+                        last_err = e
+            if last_err is not None:
+                logger.warning("LLM 调用失败，使用安全兜底台词: %s", last_err)
+            # 问题10：输出异常/失败 -> 预设安全台词 + 中性情绪 + 默认动作，绝不抛错
+            return _safe_fallback_reply()
+        except Exception:  # noqa: BLE001 绝对兜底：永不向上抛
+            logger.exception("LLM 客户端异常，已降级到安全兜底")
+            return _safe_fallback_reply()

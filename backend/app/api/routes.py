@@ -28,6 +28,7 @@ from ..core import (
     ws_hub,
 )
 from ..core.chess_engine import ai_move, legal_moves, position_status, score_to_win_prob
+from ..core.term_filter import sanitize_speech
 from ..core.model_registry import get_runtime_model, list_models, set_runtime_model
 from ..core.game_stats import (
     build_game_summary,
@@ -210,6 +211,7 @@ def _persona_comment(sess: dict, topic: str, extra: str = "") -> dict:
     try:
         out = _llm.chat([{"role": "system", "content": system}, {"role": "user", "content": prompt}])
         if out and out.get("speech_text"):
+            out["speech_text"] = sanitize_speech(out["speech_text"])  # 问题5 第四层净化
             return out
     except Exception:  # noqa: BLE001
         pass
@@ -380,6 +382,8 @@ def make_move(req: MoveRequest) -> MoveResponse:
         system_role=system_role_for(sess["personality"]),
     )
     llm_out = _llm.chat(messages)
+    # 问题5：第四层正则兜底，彻底清除坐标/记谱等机械话术
+    llm_out["speech_text"] = sanitize_speech(llm_out["speech_text"])
     sess["memory"].remember_turn("assistant", llm_out["speech_text"])
 
     # 11) 具身指令分发
