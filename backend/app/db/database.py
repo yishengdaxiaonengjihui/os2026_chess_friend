@@ -39,6 +39,11 @@ def init_db(db_path: str | None = None) -> None:
                 personality TEXT DEFAULT 'laozhang',
                 created_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS users (
+                user_id TEXT PRIMARY KEY,
+                nickname TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS games (
                 game_id TEXT PRIMARY KEY,
                 session_id TEXT NOT NULL,
@@ -47,6 +52,7 @@ def init_db(db_path: str | None = None) -> None:
                 final_fen TEXT,
                 result TEXT,
                 move_count INTEGER DEFAULT 0,
+                starred INTEGER DEFAULT 0,
                 created_at TEXT NOT NULL,
                 finished_at TEXT
             );
@@ -80,6 +86,109 @@ def init_db(db_path: str | None = None) -> None:
             );
             """
         )
+        # 迁移：为老库补 starred 列（幂等）
+        cols = [c[1] for c in cur.execute("PRAGMA table_info(games)").fetchall()]
+        if cols and "starred" not in cols:
+            cur.execute("ALTER TABLE games ADD COLUMN starred INTEGER DEFAULT 0")
+        conn.commit()
+    finally:
+        conn.close()
+
+
+# ---------------- 用户管理 ----------------
+
+def create_user(nickname: str) -> dict:
+    """创建账号：昵称去重（同昵称复用已有账号），返回用户记录。"""
+    import uuid
+
+    conn = get_conn()
+    try:
+        row = conn.execute("SELECT user_id, nickname, created_at FROM users WHERE nickname=?", (nickname,)).fetchone()
+        if row:
+            return {"user_id": row[0], "nickname": row[1], "created_at": row[2], "created": False}
+        uid = uuid.uuid4().hex[:12]
+        now = datetime.now().isoformat(timespec="seconds")
+        conn.execute("INSERT INTO users (user_id, nickname, created_at) VALUES (?,?,?)", (uid, nickname, now))
+        conn.commit()
+        return {"user_id": uid, "nickname": nickname, "created_at": now, "created": True}
+    finally:
+        conn.close()
+
+
+def get_user(user_id: str) -> dict | None:
+    conn = get_conn()
+    try:
+        row = conn.execute("SELECT user_id, nickname, created_at FROM users WHERE user_id=?", (user_id,)).fetchone()
+    finally:
+        conn.close()
+    if not row:
+        return None
+    return {"user_id": row[0], "nickname": row[1], "created_at": row[2]}
+
+
+def list_users() -> list[dict]:
+    """所有账号（含各自对局数，新的在前）。"""
+    conn = get_conn()
+    try:
+        rows = conn.execute(
+            "SELECT u.user_id, u.nickname, u.created_at, COUNT(g.game_id) AS n "
+            "FROM users u LEFT JOIN games g ON g.user_id = u.user_id "
+            "GROUP BY u.user_id ORDER BY u.created_at ASC"
+        ).fetchall()
+    finally:
+        conn.close()
+    return [
+        {"user_id": r[0], "nickname": r[1], "created_at": r[2], "games_count": r[3] or 0}
+        for r in rows
+    ]
+
+
+def rename_user(user_id: str, nickname: str) -> dict:
+    conn = get_conn()
+    try:
+        conn.execute("UPDATE users SET nickname=? WHERE user_id=?", (nickname, user_id))
+        conn.commit()
+    finally:
+        conn.close()
+    u = get_user(user_id)
+    if not u:
+        raise ValueError("账号不存在")
+    return u
+
+
+def delete_user(user_id: str) -> None:
+    """删除账号及全部数据（画像/长期记忆/棋谱/棋谱着法）。"""
+    conn = get_conn()
+    try:
+        game_ids = [r[0] for r in conn.execute("SELECT game_id FROM games WHERE user_id=?", (user_id,)).fetchall()]
+        for gid in game_ids:
+            conn.execute("DELETE FROM game_moves WHERE game_id=?", (gid,))
+        conn.execute("DELETE FROM games WHERE user_id=?", (user_id,))
+        conn.execute("DELETE FROM profiles WHERE user_id=?", (user_id,))
+        conn.execute("DELETE FROM long_term_memories WHERE user_id=?", (user_id,))
+        conn.execute("DELETE FROM users WHERE user_id=?", (user_id,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+# ---------------- 棋谱：加精 / 删除 ----------------
+
+def set_game_starred(game_id: str, starred: bool) -> None:
+    conn = get_conn()
+    try:
+        conn.execute("UPDATE games SET starred=? WHERE game_id=?", (1 if starred else 0, game_id))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def delete_game_record(game_id: str) -> None:
+    """删除整局棋谱（含着法记录）。"""
+    conn = get_conn()
+    try:
+        conn.execute("DELETE FROM game_moves WHERE game_id=?", (game_id,))
+        conn.execute("DELETE FROM games WHERE game_id=?", (game_id,))
         conn.commit()
     finally:
         conn.close()
@@ -165,12 +274,12 @@ def decrement_move_count(game_id: str, n: int = 1) -> None:
         conn.close()
 
 
-def list_games(user_id: str, limit: int = 50) -> list[dict]:
-    """棋谱库：按用户列出对局（新的在前）。"""
+def list_games(user_id: str, limit: int = 200) -> list[dict]:
+    """棋谱库：按用户列出对局（新的在前），含四状态与加精标记。"""
     conn = get_conn()
     try:
         rows = conn.execute(
-            "SELECT game_id, user_id, move_count, result, created_at, finished_at "
+            "SELECT game_id, user_id, move_count, result, starred, created_at, finished_at "
             "FROM games WHERE user_id=? ORDER BY created_at DESC LIMIT ?",
             (user_id, limit),
         ).fetchall()
@@ -182,8 +291,9 @@ def list_games(user_id: str, limit: int = 50) -> list[dict]:
             "user_id": r[1],
             "move_count": r[2] or 0,
             "result": r[3],
-            "created_at": r[4],
-            "finished_at": r[5],
+            "starred": bool(r[4]),
+            "created_at": r[5],
+            "finished_at": r[6],
         }
         for r in rows
     ]

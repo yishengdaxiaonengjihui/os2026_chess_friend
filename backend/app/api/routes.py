@@ -28,6 +28,7 @@ from ..core import (
     ws_hub,
 )
 from ..core.chess_engine import ai_move, legal_moves, position_status, score_to_win_prob
+from ..core.model_registry import get_runtime_model, list_models, set_runtime_model
 from ..core.game_stats import (
     build_game_summary,
     finalize_game,
@@ -38,25 +39,37 @@ from ..core.game_stats import (
 from ..db.database import (
     append_move_record,
     clear_game_result,
+    create_user as create_user_db,
     decrement_move_count,
+    delete_game_record,
+    delete_user as delete_user_db,
     finish_game_record,
     get_game_moves,
+    get_user,
     init_db,
     list_games,
+    list_users,
     remove_last_move_record,
+    rename_user as rename_user_db,
     save_game_record,
+    set_game_starred,
 )
 from ..models.schemas import (
     GamesListResponse,
     InterruptRequest,
     LLMOutput,
+    ModelSwitchRequest,
     MoveRequest,
     MoveResponse,
     NewGameRequest,
     NewGameResponse,
     PersonalityRequest,
     ProfileResponse,
+    StarRequest,
     UndoResponse,
+    UserCreateRequest,
+    UserLoginRequest,
+    UserRenameRequest,
 )
 
 logger = logging.getLogger(__name__)
@@ -69,7 +82,12 @@ _llm = LLMClient()
 _settings = get_settings()
 
 
-def _new_session(user_id: str, personality: str) -> dict:
+def _new_session(
+    user_id: str,
+    personality: str,
+    side: str = "red",
+    strength: str = "auto",
+) -> dict:
     game_id = uuid.uuid4().hex[:12]
     session_id = uuid.uuid4().hex[:12]
     fen = make_default_fen()
@@ -84,6 +102,8 @@ def _new_session(user_id: str, personality: str) -> dict:
         "game_id": game_id,
         "user_id": user_id,
         "personality": personality,
+        "user_color": side if side in ("red", "black") else "red",
+        "strength": strength if strength in ("low", "medium", "high", "auto") else "auto",
         "fen": fen,
         "prev_fen": fen,
         "move_index": 0,
@@ -92,33 +112,84 @@ def _new_session(user_id: str, personality: str) -> dict:
         "capture_noted": False,  # 本局是否已为首次吃子写过长期记忆
         "memory": memory,
         "dispatcher": AvatarDispatcher(),
+        "ai_opening": None,  # 执黑时 AI(红) 的首着
     }
     # 数字人状态广播 -> 对局 WS 连接
     sess["dispatcher"].set_broadcaster(
         lambda state, cmd: ws_hub.broadcast_avatar_state(sess["game_id"], state, cmd)
     )
+    # 执黑：AI(红) 先走第一手（开局库着法）
+    if sess["user_color"] == "black":
+        try:
+            er = ai_move(
+                fen,
+                color="red",
+                difficulty=_strength_to_difficulty(sess),
+                move_number=1,
+            )
+            if er["from_sq"]:
+                sess["fen"] = toggle_side(er["new_fen"])  # 轮到黑方(玩家)
+                sess["prev_fen"] = fen
+                sess["ai_opening"] = {
+                    "from_sq": er["from_sq"],
+                    "to_sq": er["to_sq"],
+                    "piece": er["piece"],
+                    "new_fen": sess["fen"],
+                }
+        except Exception:  # noqa: BLE001 引擎异常时退化为正常开局
+            sess["user_color"] = "red"
+            sess["ai_opening"] = None
+            sess["fen"] = fen
+            sess["prev_fen"] = fen
     _sessions[game_id] = sess
     return sess
 
 
-def _result_from_engine(user_fen: str, ai_new_fen: str, engine_res: dict) -> str | None:
+def _strength_to_difficulty(sess: dict) -> int | None:
+    """棋力选择 -> 引擎搜索深度：低1 / 中2 / 高5 / 自动按玩家平均胜率自适应。"""
+    st = sess.get("strength", "auto")
+    if st == "low":
+        return 1
+    if st == "medium":
+        return 2
+    if st == "high":
+        return 5
+    p = (sess.get("stats") or {}).get("avg_user_win_prob")
+    if p is None:
+        return None  # 用配置默认
+    if p < 0.4:
+        return 2
+    if p > 0.6:
+        return 5
+    return 3
+
+
+def _result_from_engine(
+    user_fen: str,
+    ai_new_fen: str,
+    engine_res: dict,
+    user_color: str = "red",
+) -> str | None:
     """对局结果：'win' | 'lose' | 'draw' | None(未结束)。
 
-    engine_res 是 AI(黑) 视角；opponent = 用户。
+    engine_res 是 AI 视角；opponent = 用户。
     结局只允许三种：用户被将死(lose)、用户将死 AI(win)、和棋(draw)。
     """
-    # 兜底：将帅被吃/消失即判胜负（老帅送吃等边界情形）
-    if "K" not in ai_new_fen:
-        return "lose"   # 红帅不在 -> 用户被将死
-    if "k" not in ai_new_fen:
-        return "win"    # 黑将不在 -> 用户将死 AI
+    ai_color = "black" if user_color == "red" else "red"
+    user_king = "K" if user_color == "red" else "k"   # 玩家主将
+    ai_king = "k" if user_color == "red" else "K"     # AI 主将
+    # 兜底：将帅被吃/消失即判胜负（送吃等边界情形）
+    if user_king not in ai_new_fen:
+        return "lose"   # 玩家主将不在 -> 用户被将死
+    if ai_king not in ai_new_fen:
+        return "win"    # AI 主将不在 -> 用户将死 AI
     if engine_res.get("opponent_checkmate"):
         return "lose"  # 用户被将死
     if engine_res.get("opponent_stalemate"):
         return "draw"  # 用户困毙
     if engine_res.get("from_sq") is None:
         # AI 无合法着法：需要判定是 AI 被将死(用户胜)还是困毙(和棋)
-        status = position_status(user_fen, color="black")
+        status = position_status(user_fen, color=ai_color)
         if status.get("checkmate"):
             return "win"
         if status.get("stalemate"):
@@ -160,14 +231,19 @@ def health() -> dict:
 
 @router.post("/api/games", response_model=NewGameResponse)
 def new_game(req: NewGameRequest) -> NewGameResponse:
-    sess = _new_session(req.user_id, req.personality)
-    logger.info("新对局创建 game_id=%s user=%s", sess["game_id"], req.user_id)
+    sess = _new_session(req.user_id, req.personality, req.side, req.strength)
+    logger.info(
+        "新对局创建 game_id=%s user=%s side=%s strength=%s",
+        sess["game_id"], req.user_id, sess["user_color"], sess["strength"],
+    )
     return NewGameResponse(
         game_id=sess["game_id"],
         user_id=req.user_id,
         fen=sess["fen"],
-        side="w",
+        side=sess["user_color"],
+        strength=sess["strength"],
         digital_human_enabled=_settings.enable_digital_human,
+        ai_opening=sess.get("ai_opening"),
     )
 
 
@@ -179,28 +255,33 @@ def make_move(req: MoveRequest) -> MoveResponse:
     if sess["game_over"]:
         raise HTTPException(status_code=400, detail="本局已结束，请新开对局")
 
-    # 1) 合法性校验（用户执红；engine 已过滤“送吃”——走完老帅受攻的着法）
-    legal = legal_moves(sess["fen"], color="red")
+    user_color = sess.get("user_color", "red")
+    ai_color = "black" if user_color == "red" else "red"
+    user_king = "K" if user_color == "red" else "k"   # 玩家主将
+    ai_king = "k" if user_color == "red" else "K"     # AI 主将
+
+    # 1) 合法性校验（engine 已过滤“送吃”——走完己方老帅受攻的着法）
+    legal = legal_moves(sess["fen"], color=user_color)
     if (req.from_sq, req.to_sq) not in {(m["from"], m["to"]) for m in legal}:
         raise HTTPException(
             status_code=400,
             detail=f"这一步走不得：会把老帅送上门或违反规则（{req.from_sq}→{req.to_sq}），请重新选择",
         )
 
-    # 2) 用户落子 -> 新 FEN（轮到黑方）
+    # 2) 用户落子 -> 轮到 AI 的新 FEN
     user_fen = toggle_side(apply_move_to_fen(sess["fen"], req.from_sq, req.to_sq))
     user_move = detect_move(sess["fen"], user_fen)
     sess["move_index"] += 1
 
-    # 兜底：用户落子后红帅必须健在（引擎已滤送吃，此处防御）
-    if "K" not in user_fen:
+    # 兜底：用户落子后己方主将必须健在（引擎已滤送吃，此处防御）
+    if user_king not in user_fen:
         raise HTTPException(status_code=400, detail="这一步走不得：老帅出险（送吃）")
 
     # 悔棋支持：快照本轮开始前的统计（undo 时回滚）
     sess["stats_snapshot"] = copy.deepcopy(sess["stats"])
 
-    # 3) 引擎 AI 应手（AI 执黑）；用户直接吃掉黑将则立即判胜，不再让引擎走
-    if "k" not in user_fen:
+    # 3) 引擎 AI 应手；用户直接吃掉 AI 主将则立即判胜，不再让引擎走
+    if ai_king not in user_fen:
         engine_res = {
             "from_sq": None, "to_sq": None, "piece": None,
             "new_fen": user_fen, "score": 10000, "win_probability": 1.0,
@@ -209,28 +290,35 @@ def make_move(req: MoveRequest) -> MoveResponse:
         ai_new_fen = user_fen
         ai_move_obj = None
     else:
-        engine_res = ai_move(user_fen, color="black", move_number=sess["move_index"])
+        engine_res = ai_move(
+            user_fen,
+            color=ai_color,
+            difficulty=_strength_to_difficulty(sess),
+            move_number=sess["move_index"],
+        )
         ai_new_fen = toggle_side(engine_res["new_fen"])
         ai_move_obj = detect_move(user_fen, ai_new_fen) if engine_res["from_sq"] else None
 
     # 4) 棋局事件（吃子 / 将军 / 将死 / 困毙）
     events: list[str] = []
+    ai_king_lost = ai_king not in ai_new_fen
+    user_king_lost = user_king not in ai_new_fen
     if user_move.captured:
         events.append(f"玩家吃子：吃掉对方{user_move.captured_name}")
     if ai_move_obj and ai_move_obj.captured:
         events.append(f"AI 吃子：吃掉玩家{ai_move_obj.captured_name}")
-    if "k" not in ai_new_fen:
-        events.append("将死：黑将被吃，玩家获胜！")
-    elif "K" not in ai_new_fen:
-        events.append("将死：红帅被吃，AI 获胜")
+    if ai_king_lost:
+        events.append("将死：对方主将被吃，玩家获胜！")
+    elif user_king_lost:
+        events.append("将死：我方主将被吃，AI 获胜")
     elif engine_res.get("opponent_in_check"):
         events.append("将军：玩家被将军！")
-    if engine_res.get("opponent_checkmate") and "k" in ai_new_fen:
+    if engine_res.get("opponent_checkmate") and not ai_king_lost and not user_king_lost:
         events.append("将死：玩家被将死，AI 获胜")
     elif engine_res.get("opponent_stalemate"):
         events.append("困毙：玩家无棋可走")
-    elif engine_res.get("from_sq") is None and "k" in ai_new_fen:
-        status = position_status(user_fen, color="black")
+    elif engine_res.get("from_sq") is None and not ai_king_lost and not user_king_lost:
+        status = position_status(user_fen, color=ai_color)
         if status.get("checkmate"):
             events.append("将死：AI 被将死，玩家获胜！")
         elif status.get("stalemate"):
@@ -257,7 +345,7 @@ def make_move(req: MoveRequest) -> MoveResponse:
     )
 
     # 7) 对局终结判定 -> 画像 + 长期记忆落盘
-    result = _result_from_engine(user_fen, ai_new_fen, engine_res)
+    result = _result_from_engine(user_fen, ai_new_fen, engine_res, user_color)
     if result is not None:
         sess["game_over"] = True
         finalize_game(stats, result)
@@ -376,8 +464,9 @@ def draw_offer(game_id: str) -> dict:
     if sess["game_over"]:
         raise HTTPException(status_code=400, detail="本局已结束")
 
-    # AI 判断：按当前局面用户(红)胜率决定是否同意和棋
-    status = position_status(sess["fen"], color="red")
+    # AI 判断：按当前局面用户胜率决定是否同意和棋（按执子方评估）
+    user_color = sess.get("user_color", "red")
+    status = position_status(sess["fen"], color=user_color)
     ev = status.get("evaluate")
     user_win_prob = round(score_to_win_prob(ev), 4) if ev is not None else 0.5
     accepted = user_win_prob >= 0.4  # AI 无明显优势即同意
@@ -463,6 +552,79 @@ def interrupt(req: InterruptRequest) -> dict:
     sess["dispatcher"].interrupt()
     sess["memory"].remember_turn("user", f"（用户打断）{req.transcript}")
     return {"status": "interrupted", "queue_cleared": True}
+
+
+# ---------------- 多用户：账号 ----------------
+@router.post("/api/users")
+def create_account(req: UserCreateRequest) -> dict:
+    """创建账号（昵称去重，已存在则复用）。"""
+    return create_user_db(req.nickname)
+
+
+@router.get("/api/users")
+def all_users() -> dict:
+    """全部账号（登录页选择用）。"""
+    return {"users": list_users()}
+
+
+@router.post("/api/users/login")
+def login(req: UserLoginRequest) -> dict:
+    """选择账号登录（本地演示：仅校验存在性）。"""
+    u = get_user(req.user_id)
+    if not u:
+        raise HTTPException(status_code=404, detail="账号不存在，请先创建")
+    return {"ok": True, "user": u}
+
+
+@router.patch("/api/users/{user_id}")
+def rename_account(user_id: str, req: UserRenameRequest) -> dict:
+    """账号管理：修改昵称。"""
+    try:
+        return rename_user_db(user_id, req.nickname)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="账号不存在")
+
+
+@router.delete("/api/users/{user_id}")
+def remove_account(user_id: str) -> dict:
+    """账号管理：删除账号及其全部数据（画像/记忆/棋谱）。"""
+    delete_user_db(user_id)
+    return {"status": "ok", "user_id": user_id}
+
+
+# ---------------- 棋谱管理：加精 / 删除 ----------------
+@router.post("/api/games/{game_id}/star")
+def star_game(game_id: str, req: StarRequest) -> dict:
+    set_game_starred(game_id, req.starred)
+    return {"status": "ok", "game_id": game_id, "starred": req.starred}
+
+
+@router.delete("/api/games/{game_id}")
+def delete_game(game_id: str) -> dict:
+    """删除整局棋谱（含着法记录）。"""
+    delete_game_record(game_id)
+    _sessions.pop(game_id, None)
+    return {"status": "ok", "game_id": game_id}
+
+
+# ---------------- 通用设置：模型管理 ----------------
+@router.get("/api/models")
+def models_list() -> dict:
+    """可用模型清单 + 当前生效模型。"""
+    return {
+        "models": list_models(_settings.llm_model),
+        "current": get_runtime_model() or _settings.llm_model,
+    }
+
+
+@router.post("/api/models")
+def switch_model(req: ModelSwitchRequest) -> dict:
+    """切换运行时模型（失败自动回退配置默认模型）。"""
+    try:
+        set_runtime_model(req.model)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"status": "ok", "model": req.model}
 
 
 @router.get("/api/profiles/{user_id}", response_model=ProfileResponse)

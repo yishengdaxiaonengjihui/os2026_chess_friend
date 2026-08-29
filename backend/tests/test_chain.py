@@ -43,7 +43,9 @@ def test_new_game():
     body = r.json()
     assert body["game_id"]
     assert body["fen"] == ccp.make_default_fen()
-    assert body["side"] == "w"
+    assert body["side"] == "red"
+    assert body["strength"] == "auto"
+    assert body["ai_opening"] is None
 
 
 def test_move_chain():

@@ -9,6 +9,8 @@ from pydantic import BaseModel, Field
 class NewGameRequest(BaseModel):
     user_id: str = Field(..., min_length=1, max_length=64)
     personality: str = Field("laozhang", description="人格：laozhang / xiaoya")
+    side: str = Field("red", description="玩家执子：red 先 / black 后")
+    strength: str = Field("auto", description="AI 棋力：low / medium / high / auto")
 
 
 class NewGameResponse(BaseModel):
@@ -16,7 +18,29 @@ class NewGameResponse(BaseModel):
     user_id: str
     fen: str
     side: str
+    strength: str
     digital_human_enabled: bool
+    ai_opening: Optional[dict[str, Any]] = None
+
+
+class UserCreateRequest(BaseModel):
+    nickname: str = Field(..., min_length=1, max_length=32)
+
+
+class UserRenameRequest(BaseModel):
+    nickname: str = Field(..., min_length=1, max_length=32)
+
+
+class UserLoginRequest(BaseModel):
+    user_id: str = Field(..., min_length=1, max_length=64)
+
+
+class StarRequest(BaseModel):
+    starred: bool
+
+
+class ModelSwitchRequest(BaseModel):
+    model: str = Field(..., min_length=1)
 
 
 class MoveRequest(BaseModel):

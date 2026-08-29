@@ -246,3 +246,117 @@ body {
   border-bottom: 1px dashed #e3eaf0;
 }
 .mv-events { color: #c0392b; font-size: 13px; }
+
+
+/* ---- 视图/登录 ---- */
+.view { min-height: 100vh; }
+.view.hidden { display: none; }
+.login-card {
+  max-width: 460px;
+  margin: 8vh auto 0;
+  background: #fff;
+  border: 1px solid #e3eaf0;
+  border-radius: 16px;
+  box-shadow: 0 6px 24px rgba(0,0,0,.12);
+  padding: 28px 32px;
+  text-align: center;
+}
+.login-card h1 { font-size: 24px; color: #1f5b8b; margin-bottom: 8px; }
+.login-create { display: flex; gap: 8px; margin: 18px 0 4px; }
+.login-create input {
+  flex: 1; padding: 10px 12px; font-size: 17px;
+  border: 1px solid #b9c6d0; border-radius: 10px;
+}
+.login-divider { margin: 20px 0 10px; color: #7a8b99; font-size: 14px; }
+.login-users { text-align: left; }
+.user-btn {
+  display: flex; justify-content: space-between; align-items: center;
+  width: 100%; padding: 12px 14px; margin: 8px 0;
+  font-size: 17px; background: #f2f6f9; border: 1px solid #d8e2ea; border-radius: 10px;
+  cursor: pointer; color: #1f5b8b;
+}
+.user-btn:hover { background: #e4edf4; }
+.user-btn .u-nick { font-weight: 700; }
+.user-btn .u-meta { color: #7a8b99; font-size: 13px; }
+
+/* ---- 顶栏 / Tab ---- */
+.topbar-user { display: flex; align-items: center; gap: 10px; }
+.user-chip {
+  background: #eef4f9; color: #1f5b8b; font-weight: 700;
+  padding: 4px 12px; border-radius: 14px;
+}
+.tabs {
+  display: flex; gap: 6px; padding: 10px 16px 0;
+  background: #fff; border-bottom: 1px solid #e3eaf0;
+}
+.tab {
+  padding: 10px 22px; font-size: 17px; cursor: pointer;
+  background: transparent; border: none; border-bottom: 3px solid transparent;
+  color: #5a6b7a; font-weight: 700;
+}
+.tab.active { color: #1f5b8b; border-bottom-color: #1f5b8b; }
+.tab-body { padding: 16px; }
+.tab-body.hidden { display: none; }
+
+/* ---- 对局设置 / 通用设置 ---- */
+.settings-panel {
+  max-width: 520px; margin: 8px auto 0;
+  background: #fff; border: 1px solid #e3eaf0; border-radius: 14px;
+  padding: 22px 26px;
+}
+.settings-panel h2 { color: #1f5b8b; margin: 0 0 16px; }
+.setting-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin: 12px 0;
+}
+.setting-row label { font-size: 17px; color: #33475b; }
+.setting-row select {
+  flex: 1; max-width: 260px; padding: 9px 10px; font-size: 17px;
+  border: 1px solid #b9c6d0; border-radius: 10px; background: #fafcfe;
+}
+.setting-row input {
+  flex: 1; padding: 9px 10px; font-size: 16px;
+  border: 1px solid #b9c6d0; border-radius: 10px;
+}
+.primary-btn {
+  width: 100%; margin-top: 8px; padding: 13px 0; font-size: 19px;
+  background: #1f5b8b; color: #fff; border: none; border-radius: 12px; cursor: pointer;
+}
+.primary-btn:hover { background: #17486f; }
+.primary-btn.big { padding: 15px 0; font-size: 21px; }
+.mini-btn { padding: 6px 12px; font-size: 14px; border: 1px solid #b9c6d0; border-radius: 8px; background: #f2f6f9; cursor: pointer; }
+.mini-btn:hover { background: #e4edf4; }
+.danger-btn {
+  padding: 8px 14px; font-size: 15px; cursor: pointer;
+  background: #fff; color: #c0392b; border: 1px solid #e0a9a2; border-radius: 9px;
+}
+.danger-btn:hover { background: #fdf1f0; }
+
+/* ---- 棋谱管理 ---- */
+.records-head { display: flex; justify-content: space-between; align-items: center; max-width: 860px; margin: 0 auto 12px; }
+.records-head h2 { color: #1f5b8b; margin: 0; }
+#records-list { max-width: 860px; margin: 0 auto; }
+.record-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; margin: 8px 0; font-size: 16px;
+  background: #fff; border: 1px solid #e3eaf0; border-radius: 10px;
+}
+.rec-state { font-weight: 700; padding: 2px 10px; border-radius: 10px; font-size: 14px; }
+.rec-state.s-win  { background: #e8f5e9; color: #2e7d32; }
+.rec-state.s-lose { background: #fdecea; color: #c0392b; }
+.rec-state.s-draw { background: #fff8e1; color: #b8860b; }
+.rec-state.s-none { background: #eef2f6; color: #5a6b7a; }
+.rec-star { font-size: 18px; }
+.rec-date { color: #7a8b99; font-size: 14px; flex: 1; }
+.rec-moves { color: #33475b; font-size: 14px; }
+.record-row .mini-btn { margin-left: 2px; }
+
+/* ---- 通用设置：模型 ---- */
+.model-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 12px; margin: 6px 0; font-size: 16px;
+  background: #f7fafc; border: 1px solid #e3eaf0; border-radius: 9px; cursor: pointer;
+}
+.model-row:hover { background: #eef4f9; }
+.tag { background: #1f5b8b; color: #fff; font-size: 12px; padding: 2px 8px; border-radius: 8px; }
+

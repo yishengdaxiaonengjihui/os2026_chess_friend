@@ -29,8 +29,38 @@
     async health() {
       return request("/health");
     },
-    async newGame(userId, personality) {
-      return request("/api/games", jsonBody({ user_id: userId, personality: personality }));
+    async newGame(userId, personality, side, strength) {
+      return request("/api/games", jsonBody({ user_id: userId, personality: personality, side: side, strength: strength }));
+    },
+    // ---- 多用户 ----
+    async createUser(nickname) {
+      return request("/api/users", jsonBody({ nickname: nickname }));
+    },
+    async listUsers() {
+      return request("/api/users");
+    },
+    async loginUser(userId) {
+      return request("/api/users/login", jsonBody({ user_id: userId }));
+    },
+    async renameUser(userId, nickname) {
+      return request("/api/users/" + encodeURIComponent(userId), jsonBody({ nickname: nickname }));
+    },
+    async deleteUser(userId) {
+      return request("/api/users/" + encodeURIComponent(userId), { method: "DELETE" });
+    },
+    // ---- 棋谱管理 ----
+    async starGame(gameId, starred) {
+      return request("/api/games/" + gameId + "/star", jsonBody({ starred: starred }));
+    },
+    async deleteGame(gameId) {
+      return request("/api/games/" + gameId, { method: "DELETE" });
+    },
+    // ---- 模型管理 ----
+    async listModels() {
+      return request("/api/models");
+    },
+    async switchModel(model) {
+      return request("/api/models", jsonBody({ model: model }));
     },
     async legalMoves(fen, color) {
       const q = new URLSearchParams({ fen: fen, color: color });

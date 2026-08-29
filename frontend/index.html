@@ -7,79 +7,165 @@
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
-  <div id="app">
+  <!-- 登录界面：创建账号 / 选择账号 -->
+  <div id="login-view" class="view">
+    <div class="login-card">
+      <h1>🀄 适老化数字人中国象棋棋友</h1>
+      <p class="muted">登录后开始下棋（可创建账号，也可选择一个已有账号）</p>
+      <div class="login-create">
+        <input id="login-nickname" maxlength="12" placeholder="输入昵称，创建新账号" />
+        <button id="btn-create-account" class="primary-btn">创建账号</button>
+      </div>
+      <div class="login-divider">或选择已有账号登录</div>
+      <div id="login-users" class="login-users"><div class="muted">加载账号…</div></div>
+    </div>
+  </div>
+
+  <!-- 主界面 -->
+  <div id="app-view" class="view hidden">
     <header class="topbar">
       <h1>🀄 适老化数字人中国象棋棋友</h1>
-      <div class="topbar-actions">
-        <label for="personality">棋友人格</label>
-        <select id="personality">
-          <option value="laozhang">老张（豪爽棋友）</option>
-          <option value="xiaoya">小雅（温柔陪练）</option>
-        </select>
-        <button id="btn-undo">↩ 悔棋</button>
-        <button id="btn-games">📖 棋谱库</button>
-        <button id="btn-new-game">新开对局</button>
+      <div class="topbar-user">
+        <span class="user-chip" id="user-label">用户</span>
+        <button id="btn-logout" class="mini-btn">退出登录</button>
       </div>
     </header>
 
-    <main class="layout">
-      <section class="board-wrap">
-        <div id="board" class="board"></div>
-        <div class="board-side">
-          <div class="status" id="status">正在准备开局…</div>
-          <div class="winbar">
-            <span class="side-label red">红方(你)</span>
-            <div class="bar"><div id="win-fill"></div></div>
-            <span class="side-label black">黑方(AI)</span>
-          </div>
-          <div class="game-actions">
-            <button id="btn-draw">🤝 和棋</button>
-            <button id="btn-resign">🏳 认输</button>
-          </div>
-        </div>
-      </section>
+    <nav class="tabs">
+      <button class="tab active" data-tab="start">开始对局</button>
+      <button class="tab" data-tab="records">棋谱管理</button>
+      <button class="tab" data-tab="settings">通用设置</button>
+    </nav>
 
-      <aside class="companion">
-        <div class="avatar-card">
-          <div class="avatar" id="avatar">🧓</div>
-          <div id="avatar-container" class="avatar-canvas hidden"></div>
-          <div class="avatar-name" id="avatar-name">老张</div>
-          <div class="avatar-meta">
-            <span class="chip" id="emotion-chip">情绪 --</span>
-            <span class="chip" id="action-chip">动作 --</span>
-            <span class="chip dh-chip" id="dh-chip">🤖 数字人：就绪</span>
+    <!-- Tab：开始对局 -->
+    <div class="tab-body" id="tab-start">
+      <div id="game-settings" class="settings-panel">
+        <h2>⚙️ 对局设置</h2>
+        <div class="setting-row">
+          <label for="set-side">玩家执子</label>
+          <select id="set-side">
+            <option value="red">红先（先手）</option>
+            <option value="black">黑后（后手）</option>
+          </select>
+        </div>
+        <div class="setting-row">
+          <label for="set-personality">AI 棋友</label>
+          <select id="set-personality">
+            <option value="laozhang">老张（豪爽棋友）</option>
+            <option value="xiaoya">小雅（温柔陪练）</option>
+          </select>
+        </div>
+        <div class="setting-row">
+          <label for="set-strength">AI 棋力</label>
+          <select id="set-strength">
+            <option value="auto">自动（随你水平）</option>
+            <option value="low">低（入门）</option>
+            <option value="medium">中（普通）</option>
+            <option value="high">高（高手）</option>
+          </select>
+        </div>
+        <button id="btn-start-game" class="primary-btn big">开始对局</button>
+      </div>
+
+      <div id="game-layout" class="layout hidden">
+        <section class="board-wrap">
+          <div id="board" class="board"></div>
+          <div class="board-side">
+            <div class="status" id="status">正在准备开局…</div>
+            <div class="winbar">
+              <span class="side-label red" id="winbar-red">红方(你)</span>
+              <div class="bar"><div id="win-fill"></div></div>
+              <span class="side-label black" id="winbar-black">黑方(AI)</span>
+            </div>
+            <div class="game-actions">
+              <button id="btn-undo">↩ 悔棋</button>
+              <button id="btn-draw">🤝 和棋</button>
+              <button id="btn-resign">🏳 认输</button>
+              <button id="btn-back-menu">返回主菜单</button>
+            </div>
+          </div>
+        </section>
+
+        <aside class="companion">
+          <div class="avatar-card">
+            <div class="avatar" id="avatar">🧓</div>
+            <div id="avatar-container" class="avatar-canvas hidden"></div>
+            <div class="avatar-name" id="avatar-name">老张</div>
+            <div class="avatar-meta">
+              <span class="chip" id="emotion-chip">情绪 --</span>
+              <span class="chip" id="action-chip">动作 --</span>
+              <span class="chip dh-chip" id="dh-chip">🤖 数字人：就绪</span>
+            </div>
+          </div>
+          <div class="speech" id="speech">你好呀老哥，咱开局杀一盘！</div>
+
+          <div class="panel-section">
+            <h3>本局事件</h3>
+            <ul id="events"><li class="muted">暂无</li></ul>
+          </div>
+          <div class="panel-section">
+            <h3>棋友画像（下棋行为统计，非医疗诊断）</h3>
+            <div id="profile" class="muted">开局后逐步生成…</div>
+          </div>
+          <div class="panel-section">
+            <h3>长期记忆</h3>
+            <ul id="memories"><li class="muted">暂无</li></ul>
+          </div>
+        </aside>
+      </div>
+    </div>
+
+    <!-- Tab：棋谱管理 -->
+    <div class="tab-body hidden" id="tab-records">
+      <div class="records-head">
+        <h2>📖 棋谱管理</h2>
+        <button id="btn-refresh-records" class="mini-btn">刷新</button>
+      </div>
+      <div id="records-list" class="muted">加载中…</div>
+    </div>
+
+    <!-- Tab：通用设置 -->
+    <div class="tab-body hidden" id="tab-settings">
+      <div class="settings-panel">
+        <h2>🔧 通用设置</h2>
+        <div class="panel-section">
+          <h3>账号管理</h3>
+          <div class="setting-row"><span id="account-name">-</span></div>
+          <div class="setting-row">
+            <input id="rename-nickname" maxlength="12" placeholder="新昵称" />
+            <button id="btn-rename" class="mini-btn">改名</button>
+          </div>
+          <div class="setting-row">
+            <button id="btn-delete-account" class="danger-btn">删除账号（含全部棋谱与记忆）</button>
           </div>
         </div>
-        <div class="speech" id="speech">你好呀老哥，咱开局杀一盘！</div>
-
         <div class="panel-section">
-          <h3>本局事件</h3>
-          <ul id="events"><li class="muted">暂无</li></ul>
+          <h3>主题</h3>
+          <p class="muted">（敬请期待）</p>
         </div>
         <div class="panel-section">
-          <h3>棋友画像（下棋行为统计，非医疗诊断）</h3>
-          <div id="profile" class="muted">开局后逐步生成…</div>
+          <h3>背景音乐</h3>
+          <p class="muted">（敬请期待）</p>
         </div>
         <div class="panel-section">
-          <h3>长期记忆</h3>
-          <ul id="memories"><li class="muted">暂无</li></ul>
+          <h3>模型管理</h3>
+          <div id="model-list" class="muted">加载中…</div>
         </div>
-        <div class="panel-section">
-          <h3>棋谱库</h3>
-          <div id="games-list" class="muted">对局落子后自动保存</div>
-        </div>
-      </aside>
-    </main>
+      </div>
+    </div>
   </div>
+
+  <!-- 查看棋谱模态 -->
   <div id="modal-mask" class="modal-mask hidden">
     <div class="modal">
       <div class="modal-head">
-        <span id="modal-title">棋谱库</span>
+        <span id="modal-title">棋谱</span>
         <button id="modal-close" class="mini-btn">关闭</button>
       </div>
       <div id="modal-body" class="modal-body"></div>
     </div>
   </div>
+
   <script src="js/api.js"></script>
   <script src="js/chessboard.js"></script>
   <script src="js/avatar-adapter.js"></script>

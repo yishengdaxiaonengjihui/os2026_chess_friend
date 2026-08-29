@@ -11,6 +11,7 @@ import re
 from typing import Any, Optional
 
 from ..config import get_settings
+from .model_registry import effective_model
 
 MOCK_LINES = [
     "好棋好棋，这一步走得挺稳当的！",
@@ -94,23 +95,30 @@ class LLMClient:
         if self._client is None:
             return _mock_reply(messages)
 
+        default_model = self.settings.llm_model
+        # 模型顺序：运行时选择模型 -> 配置默认模型（运行时模型失败时回退）
+        models = [effective_model(default_model)]
+        if models[0] != default_model:
+            models.append(default_model)
+
         last_err: Optional[Exception] = None
-        for _ in range(max_retries + 1):
-            try:
-                kwargs: dict[str, Any] = {
-                    "model": self.settings.llm_model,
-                    "messages": messages,
-                    "max_tokens": self.settings.llm_max_tokens,
-                    "temperature": self.settings.llm_temperature,
-                    "response_format": {"type": "json_object"},
-                }
-                if self.settings.llm_thinking_off:
-                    kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
-                resp = self._client.chat.completions.create(**kwargs)
-                raw = resp.choices[0].message.content or ""
-                obj = _validate(_parse_llm_json(raw))
-                return obj
-            except Exception as e:  # 网络/解析/限流都重试
-                last_err = e
+        for model in models:
+            for _ in range(max_retries + 1):
+                try:
+                    kwargs: dict[str, Any] = {
+                        "model": model,
+                        "messages": messages,
+                        "max_tokens": self.settings.llm_max_tokens,
+                        "temperature": self.settings.llm_temperature,
+                        "response_format": {"type": "json_object"},
+                    }
+                    if self.settings.llm_thinking_off:
+                        kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
+                    resp = self._client.chat.completions.create(**kwargs)
+                    raw = resp.choices[0].message.content or ""
+                    obj = _validate(_parse_llm_json(raw))
+                    return obj
+                except Exception as e:  # 网络/解析/限流都重试
+                    last_err = e
         # 全部重试失败：mock 兜底，保证服务不挂
         return _mock_reply(messages)

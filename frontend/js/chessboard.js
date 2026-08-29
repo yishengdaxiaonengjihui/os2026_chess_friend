@@ -78,7 +78,15 @@
       const sw = Math.max(1, L.stepX * 0.02);
       // 边框 + 横线 + 竖线
       const lines = [];
-      for (let f = 0; f < 9; f++) lines.push([this._x(f), L.padY, this._x(f), L.padY + 9 * L.stepY, f === 0 || f === 8]);
+      // 竖线：左右两边边框贯通；中间列在河界带(行4~5之间)断开，形成“楚河汉界”留白
+      for (let f = 0; f < 9; f++) {
+        if (f === 0 || f === 8) {
+          lines.push([this._x(f), L.padY, this._x(f), L.padY + 9 * L.stepY, true]);
+        } else {
+          lines.push([this._x(f), L.padY, this._x(f), this._y(4), false]);
+          lines.push([this._x(f), this._y(5), this._x(f), L.padY + 9 * L.stepY, false]);
+        }
+      }
       for (let r = 0; r < 10; r++) lines.push([L.padX, this._y(r), L.padX + 8 * L.stepX, this._y(r), r === 0 || r === 9]);
       // 河界内只画竖线（去掉中间4条横线）
       for (let r = 1; r <= 4; r++) {

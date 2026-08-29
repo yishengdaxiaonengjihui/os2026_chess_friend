@@ -1,30 +1,60 @@
-// app.js —— 游戏编排：新开局、点击落子、AI 应手、棋友面板更新
+// app.js —— 适老化数字人中国象棋棋友：登录 / 主界面三 Tab / 对局编排
 "use strict";
 
 (function () {
   const FILES = ["a", "b", "c", "d", "e", "f", "g", "h", "i"];
 
   const el = {
+    // 登录
+    loginView: document.getElementById("login-view"),
+    appView: document.getElementById("app-view"),
+    loginNickname: document.getElementById("login-nickname"),
+    btnCreateAccount: document.getElementById("btn-create-account"),
+    loginUsers: document.getElementById("login-users"),
+    // 顶栏
+    userLabel: document.getElementById("user-label"),
+    btnLogout: document.getElementById("btn-logout"),
+    // Tab
+    tabStart: document.getElementById("tab-start"),
+    tabRecords: document.getElementById("tab-records"),
+    tabSettings: document.getElementById("tab-settings"),
+    // 对局设置
+    setSide: document.getElementById("set-side"),
+    setPersonality: document.getElementById("set-personality"),
+    setStrength: document.getElementById("set-strength"),
+    btnStartGame: document.getElementById("btn-start-game"),
+    gameSettings: document.getElementById("game-settings"),
+    gameLayout: document.getElementById("game-layout"),
+    btnBackMenu: document.getElementById("btn-back-menu"),
+    // 对局
     board: document.getElementById("board"),
     status: document.getElementById("status"),
     winFill: document.getElementById("win-fill"),
-    personality: document.getElementById("personality"),
-    btnNew: document.getElementById("btn-new-game"),
+    winbarRed: document.getElementById("winbar-red"),
+    winbarBlack: document.getElementById("winbar-black"),
+    btnUndo: document.getElementById("btn-undo"),
+    btnDraw: document.getElementById("btn-draw"),
+    btnResign: document.getElementById("btn-resign"),
     speech: document.getElementById("speech"),
     avatar: document.getElementById("avatar"),
     avatarName: document.getElementById("avatar-name"),
+    avatarContainer: document.getElementById("avatar-container"),
     emotionChip: document.getElementById("emotion-chip"),
     actionChip: document.getElementById("action-chip"),
+    dhChip: document.getElementById("dh-chip"),
     events: document.getElementById("events"),
     profile: document.getElementById("profile"),
     memories: document.getElementById("memories"),
-    dhChip: document.getElementById("dh-chip"),
-    avatarContainer: document.getElementById("avatar-container"),
-    btnUndo: document.getElementById("btn-undo"),
-    btnGames: document.getElementById("btn-games"),
-    btnDraw: document.getElementById("btn-draw"),
-    btnResign: document.getElementById("btn-resign"),
-    gamesList: document.getElementById("games-list"),
+    // 棋谱管理
+    btnRefreshRecords: document.getElementById("btn-refresh-records"),
+    recordsList: document.getElementById("records-list"),
+    // 通用设置
+    accountName: document.getElementById("account-name"),
+    renameNickname: document.getElementById("rename-nickname"),
+    btnRename: document.getElementById("btn-rename"),
+    btnDeleteAccount: document.getElementById("btn-delete-account"),
+    modelList: document.getElementById("model-list"),
+    // 模态
     modalMask: document.getElementById("modal-mask"),
     modalTitle: document.getElementById("modal-title"),
     modalBody: document.getElementById("modal-body"),
@@ -39,21 +69,176 @@
     fen: "",
     busy: false,
     gameOver: false,
-    selected: null, // {file, rank}
+    userSide: "red", // 玩家执子：red / black
+    selected: null,  // {file, rank}
     targets: [],
   };
 
-  let legalCache = {}; // key: fen|color -> moves[]（同一局面重复选子不再请求后端）
+  let legalCache = {}; // key: fen|color -> moves[]
 
-  function userId() {
-    let id = localStorage.getItem("cf_user_id");
-    if (!id) {
-      id = "u-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-      localStorage.setItem("cf_user_id", id);
-    }
-    return id;
+  // ---------------- 账号 / 会话 ----------------
+  function currentUser() {
+    try { return JSON.parse(localStorage.getItem("cf_user") || "null"); }
+    catch (e) { return null; }
+  }
+  function saveUser(u) { localStorage.setItem("cf_user", JSON.stringify(u)); }
+  function userId() { const u = currentUser(); return u ? u.user_id : ""; }
+
+  // ---------------- 视图 / Tab ----------------
+  function showView(name) {
+    el.loginView.classList.toggle("hidden", name !== "login");
+    el.appView.classList.toggle("hidden", name !== "app");
+  }
+  function showTab(name) {
+    document.querySelectorAll(".tab").forEach(function (t) { t.classList.toggle("active", t.dataset.tab === name); });
+    el.tabStart.classList.toggle("hidden", name !== "start");
+    el.tabRecords.classList.toggle("hidden", name !== "records");
+    el.tabSettings.classList.toggle("hidden", name !== "settings");
+    if (name === "start") initStartTab();
+    if (name === "records") renderRecords();
+    if (name === "settings") renderSettings();
   }
 
+  // ---------------- 登录 ----------------
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+    });
+  }
+
+  async function renderLoginUsers() {
+    try {
+      const res = await API.listUsers();
+      const list = res.users || [];
+      el.loginUsers.innerHTML = "";
+      if (!list.length) {
+        el.loginUsers.innerHTML = "<div class='muted'>还没有账号，输入昵称创建一个吧</div>";
+        return;
+      }
+      list.forEach(function (u) {
+        const b = document.createElement("button");
+        b.className = "user-btn";
+        b.innerHTML = "<span class='u-nick'>" + esc(u.nickname) + "</span><span class='u-meta'>" + (u.games_count || 0) + " 局</span>";
+        b.addEventListener("click", function () { loginAs(u); });
+        el.loginUsers.appendChild(b);
+      });
+    } catch (e) {
+      el.loginUsers.innerHTML = "<div class='muted'>账号加载失败：" + esc(e.message) + "</div>";
+    }
+  }
+
+  el.btnCreateAccount.addEventListener("click", createAccount);
+  el.loginNickname.addEventListener("keydown", function (ev) { if (ev.key === "Enter") createAccount(); });
+  async function createAccount() {
+    const nick = el.loginNickname.value.trim();
+    if (!nick) return;
+    try {
+      const u = await API.createUser(nick);
+      el.loginNickname.value = "";
+      loginAs(u);
+    } catch (e) {
+      alert("创建账号失败：" + e.message);
+    }
+  }
+
+  function loginAs(u) {
+    saveUser(u);
+    el.userLabel.textContent = u.nickname;
+    showView("app");
+    showTab("start");
+  }
+
+  el.btnLogout.addEventListener("click", function () { logout(); });
+  function logout() {
+    localStorage.removeItem("cf_user");
+    if (dhWs) { try { dhWs.close(); } catch (e) { /* 忽略 */ } dhWs = null; }
+    resetGameState();
+    showView("login");
+    renderLoginUsers();
+  }
+
+  function resetGameState() {
+    state.game = null;
+    state.fen = "";
+    state.gameOver = false;
+    state.userSide = "red";
+    state.selected = null;
+    state.targets = [];
+    legalCache = {};
+    state.board.setFen("");
+    showSettingsForm();
+  }
+
+  // ---------------- 对局设置 / 开始对局 ----------------
+  function showSettingsForm() { el.gameSettings.classList.remove("hidden"); el.gameLayout.classList.add("hidden"); }
+  function showGame() { el.gameSettings.classList.add("hidden"); el.gameLayout.classList.remove("hidden"); }
+  function initStartTab() { if (state.game) showGame(); else showSettingsForm(); }
+  function yourTurnText() { return state.userSide === "black" ? "该你走棋（黑方）" : "该你走棋（红方）"; }
+
+  function updateWinbarLabels() {
+    if (state.userSide === "black") {
+      el.winbarRed.textContent = "红方(AI)";
+      el.winbarBlack.textContent = "黑方(你)";
+    } else {
+      el.winbarRed.textContent = "红方(你)";
+      el.winbarBlack.textContent = "黑方(AI)";
+    }
+  }
+
+  el.btnStartGame.addEventListener("click", newGame);
+  el.btnBackMenu.addEventListener("click", function () { showSettingsForm(); });
+  document.querySelectorAll(".tab").forEach(function (t) {
+    t.addEventListener("click", function () { showTab(t.dataset.tab); });
+  });
+
+  async function newGame() {
+    state.busy = true;
+    state.board.setBusy(true);
+    try {
+      const personality = el.setPersonality.value;
+      const side = el.setSide.value;
+      const strength = el.setStrength.value;
+      setAvatar(personality);
+      resetPanel();
+      const game = await API.newGame(userId(), personality, side, strength);
+      state.game = game;
+      state.gameOver = false;
+      state.userSide = game.side === "black" ? "black" : "red";
+      state.fen = game.fen;
+      state.selected = null;
+      state.targets = [];
+      legalCache = {};
+      state.board.clearSelection();
+      state.board.setFen(game.fen);
+      updateWinbarLabels();
+      showGame();
+      if (game.ai_opening && game.ai_opening.from_sq) {
+        state.board.markAiMove(game.ai_opening.from_sq, game.ai_opening.to_sq);
+        addEvent("AI(红) 先行：" + game.ai_opening.from_sq + "→" + game.ai_opening.to_sq);
+        setStatus("AI(红) 已落子，该你走棋（黑方）");
+      } else {
+        setStatus("该你走棋（红方）");
+        addEvent("新对局开始，你是红方，先行。");
+      }
+      if (!game.digital_human_enabled) {
+        el.avatar.style.opacity = "0.4";
+        el.avatar.title = "数字人已降级（ENABLE_DIGITAL_HUMAN=false）";
+        setDhState("off");
+      } else {
+        el.avatar.style.opacity = "1";
+        setDhState("idle");
+        initAvatarAdapter(true);
+        connectDhWs(game.game_id);
+      }
+    } catch (err) {
+      setStatus("开局失败：" + err.message);
+    } finally {
+      state.busy = false;
+      state.board.setBusy(false);
+    }
+  }
+
+  // ---------------- 棋盘落子 ----------------
   function fileToSq(file, rank) { return FILES[file] + rank; }
 
   function pieceAt(file, rank) {
@@ -69,8 +254,9 @@
     return null;
   }
   function isRed(ch) { return !!ch && ch === ch.toUpperCase(); }
+  function isUserPiece(ch) { return state.userSide === "red" ? isRed(ch) : !isRed(ch); }
 
-  // ---- 本地乐观落子用的 FEN 工具（仅用于即时渲染，权威 FEN 以后端为准）----
+  // 本地乐观落子（仅即时渲染，权威 FEN 以后端为准）
   function expandRow(row) {
     const out = [];
     for (const ch of row) {
@@ -122,9 +308,9 @@
       ["惯用开局", profile.opening || "—"],
       ["备注", profile.notes || "—"],
     ];
-    for (const [k, v] of rows) {
+    for (const kv of rows) {
       const d = document.createElement("div");
-      d.innerHTML = "<b>" + k + "：</b>" + v;
+      d.innerHTML = "<b>" + kv[0] + "：</b>" + kv[1];
       el.profile.appendChild(d);
     }
     if (profile.stats && profile.stats.games > 0) {
@@ -157,7 +343,18 @@
     el.avatarName.textContent = a[1];
   }
 
-  // ---- 数字人状态指示（第三阶段）----
+  function resetPanel() {
+    el.speech.textContent = "你好呀，咱开局下棋吧！";
+    el.emotionChip.textContent = "情绪 --";
+    el.actionChip.textContent = "动作 --";
+    el.winFill.style.width = "50%";
+    el.events.innerHTML = "<li class='muted'>暂无</li>";
+    el.profile.innerHTML = "<span class='muted'>开局后逐步生成…</span>";
+    renderMemories([]);
+    setStatus("开局中…");
+  }
+
+  // ---------------- 数字人 ----------------
   function setDhState(state) {
     const map = {
       speaking: "🎤 数字人：讲话中",
@@ -171,7 +368,6 @@
   let dhWs = null;
   let avatarAdapter = null;
 
-  // 初始化数字人适配层（星云 SDK 优先，朗读降级）；每页只建一次
   function initAvatarAdapter(dhEnabled) {
     if (avatarAdapter || !dhEnabled || !window.AvatarAdapter) return;
     fetch("/api/info")
@@ -208,63 +404,18 @@
     } catch (e) { /* WS 不可用时静默 */ }
   }
 
-  function resetPanel() {
-    el.speech.textContent = "你好呀老哥，咱开局杀一盘！";
-    el.emotionChip.textContent = "情绪 --";
-    el.actionChip.textContent = "动作 --";
-    el.winFill.style.width = "50%";
-    el.events.innerHTML = "<li class='muted'>暂无</li>";
-    el.profile.innerHTML = "<span class='muted'>开局后逐步生成…</span>";
-    renderMemories([]);
-    setStatus("开局中…");
-  }
-
-  async function newGame() {
-    state.busy = true;
-    state.board.setBusy(true);
-    try {
-      const personality = el.personality.value;
-      setAvatar(personality);
-      resetPanel();
-      const game = await API.newGame(userId(), personality);
-      state.game = game;
-      state.gameOver = false;
-      state.fen = game.fen;
-      state.selected = null;
-      state.targets = [];
-      legalCache = {};
-      state.board.clearSelection();
-      state.board.setFen(game.fen);
-      setStatus("该你走棋（红方）");
-      addEvent("新对局开始，你是红方，先行。");
-      if (!game.digital_human_enabled) {
-        el.avatar.style.opacity = "0.4";
-        el.avatar.title = "数字人已降级（ENABLE_DIGITAL_HUMAN=false）";
-        setDhState("off");
-      } else {
-        el.avatar.style.opacity = "1";
-        setDhState("idle");
-        initAvatarAdapter(true);
-        connectDhWs(game.game_id);
-      }
-    } catch (err) {
-      setStatus("开局失败：" + err.message);
-    } finally {
-      state.busy = false;
-      state.board.setBusy(false);
-    }
-  }
-
+  // ---------------- 选子 / 落子 ----------------
   async function selectPiece(file, rank) {
     const piece = pieceAt(file, rank);
-    if (!piece || !isRed(piece)) { state.board.clearSelection(); return; }
+    if (!piece || !isUserPiece(piece)) { state.board.clearSelection(); return; }
     state.selected = { file, rank };
     state.board.select(file, rank);
     try {
-      const key = state.fen + "|red";
+      const color = state.userSide;
+      const key = state.fen + "|" + color;
       let moves = legalCache[key];
       if (!moves) {
-        const res = await API.legalMoves(state.fen, "red");
+        const res = await API.legalMoves(state.fen, color);
         moves = res.moves;
         legalCache[key] = moves;
       }
@@ -286,11 +437,9 @@
     if (state.gameOver) return;
     state.busy = true;
     state.board.setBusy(true);
-    // 用户落子 = 主动打断数字人讲话（barge-in）
-    if (avatarAdapter) avatarAdapter.stop();
+    if (avatarAdapter) avatarAdapter.stop(); // 用户落子 = 打断数字人（barge-in）
     const fromSq = fileToSq(state.selected.file, state.selected.rank);
     const toSq = fileToSq(file, rank);
-    // 乐观落子：先本地渲染你的着法（滑动动画），不等后端
     const optimistic = applyLocalMove(state.fen, fromSq, toSq);
     state.fen = optimistic;
     state.board.movePiece(fromSq, toSq, optimistic);
@@ -308,7 +457,6 @@
       }
       for (const e of resp.events) addEvent(e);
 
-      // 棋友面板
       const llm = resp.llm_output;
       el.speech.textContent = llm.speech_text;
       if (resp.avatar_command) {
@@ -326,20 +474,19 @@
       renderProfile(resp.profile);
       renderMemories(resp.long_term_memories);
 
-      // 终局判断
       const hasMate = resp.events.some(function (e) { return e.indexOf("将死") >= 0; });
       const hasStale = resp.events.some(function (e) { return e.indexOf("困毙") >= 0; });
       if (hasMate) {
         state.gameOver = true;
         const userWon = resp.events.some(function (e) { return e.indexOf("玩家获胜") >= 0; });
-        setStatus(userWon ? "对局结束：你将死老张，赢了！点击「新开对局」再来一盘" : "对局结束：你被将死了，老张险胜！点击「新开对局」再来一盘");
-        refreshGamesList();
+        setStatus(userWon ? "对局结束：你将死 AI，赢了！点击「开始对局」再来一盘" : "对局结束：你被将死了，AI 获胜。点击「开始对局」再来一盘");
+        renderRecords();
       } else if (hasStale) {
         state.gameOver = true;
-        setStatus("对局结束：困毙，和棋。点击「新开对局」再来一盘");
-        refreshGamesList();
+        setStatus("对局结束：困毙，和棋。点击「开始对局」再来一盘");
+        renderRecords();
       } else {
-        setStatus("该你走棋（红方）");
+        setStatus(yourTurnText());
       }
     } catch (err) {
       setStatus("落子失败：" + err.message);
@@ -356,12 +503,12 @@
   state.board.onSquareClick = function (file, rank) {
     if (state.busy) return;
     if (state.gameOver) return;
-    if (!state.game) { setStatus("请先新开对局"); return; }
+    if (!state.game) { setStatus("请先开始对局"); return; }
     if (state.selected) {
       const isTarget = state.targets.some(function (t) { return t.file === file && t.rank === rank; });
       if (isTarget) { makeMove(file, rank); return; }
       const piece = pieceAt(file, rank);
-      if (piece && isRed(piece)) { selectPiece(file, rank); return; }
+      if (piece && isUserPiece(piece)) { selectPiece(file, rank); return; }
       state.selected = null;
       state.targets = [];
       state.board.clearSelection();
@@ -370,24 +517,7 @@
     selectPiece(file, rank);
   };
 
-  el.btnNew.addEventListener("click", newGame);
-
-  // ---- 人格切换：同步后端（新人格重新开始聊天记忆）----
-  el.personality.addEventListener("change", function () {
-    const p = el.personality.value;
-    setAvatar(p);
-    if (state.game) {
-      API.setPersonality(state.game.game_id, p)
-        .then(function () {
-          addEvent("已切换棋友人格：" + (p === "xiaoya" ? "小雅（温柔陪练）" : "老张（豪爽棋友）"));
-          setStatus("该你走棋（红方）");
-          el.speech.textContent = p === "xiaoya" ? "你好呀，咱们慢慢下，不急～" : "好嘞，换我老张陪你杀一盘！";
-        })
-        .catch(function () { /* 切换失败静默 */ });
-    }
-  });
-
-  // ---- 悔棋 ----
+  // ---------------- 悔棋 / 和棋 / 认输 ----------------
   el.btnUndo.addEventListener("click", undoMove);
   async function undoMove() {
     if (state.busy || !state.game) return;
@@ -402,7 +532,7 @@
       state.board.clearSelection();
       state.board.clearTargets();
       state.board.setFen(res.fen);
-      setStatus("已悔棋一步，该你走棋（红方）");
+      setStatus("已悔棋一步，" + yourTurnText());
       addEvent("悔棋一步");
     } catch (err) {
       setStatus("悔棋失败：" + err.message);
@@ -412,7 +542,6 @@
     }
   }
 
-  // ---- 和棋（AI 自动判断）/ 认输 ----
   el.btnDraw.addEventListener("click", drawOffer);
   async function drawOffer() {
     if (state.busy || state.gameOver || !state.game) return;
@@ -427,11 +556,11 @@
       else setDhState("speaking");
       if (res.accepted) {
         state.gameOver = true;
-        setStatus("对局结束：和棋！点击「新开对局」再来一盘");
+        setStatus("对局结束：和棋！点击「开始对局」再来一盘");
         addEvent("🤝 和棋：AI 同意和棋");
-        refreshGamesList();
+        renderRecords();
       } else {
-        setStatus("AI 不同意和棋，继续对局（该你走棋）");
+        setStatus("AI 不同意和棋，继续对局（" + (state.userSide === "black" ? "该你走棋·黑方" : "该你走棋·红方") + "）");
         addEvent("🤝 提出和棋，AI 暂不同意，继续下");
       }
     } catch (err) {
@@ -455,9 +584,9 @@
       if (avatarAdapter) avatarAdapter.speak({ ssml: llm.speech_text, emotion_sdk: llm.emotion_tag });
       else setDhState("speaking");
       state.gameOver = true;
-      setStatus("对局结束：你认输了，老张获胜。点击「新开对局」再来一盘");
+      setStatus("对局结束：你认输了，AI 获胜。点击「开始对局」再来一盘");
       addEvent("🏳 认输：本局判负");
-      refreshGamesList();
+      renderRecords();
     } catch (err) {
       setStatus("认输失败：" + err.message);
     } finally {
@@ -466,58 +595,54 @@
     }
   }
 
-  // ---- 棋谱库 ----
-  function resultText(r) {
-    return { win: "胜", lose: "负", draw: "和" }[r] || "未结束";
-  }
-  async function refreshGamesList() {
-    try {
-      const res = await API.listGames(userId());
-      if (!res.games || res.games.length === 0) {
-        el.gamesList.textContent = "对局落子后自动保存";
-        el.gamesList.className = "muted";
-        return;
-      }
-      el.gamesList.className = "";
-      el.gamesList.innerHTML = "";
-      res.games.slice(0, 5).forEach(function (g) {
-        const row = document.createElement("div");
-        row.className = "game-mini";
-        row.textContent = (g.created_at || "").slice(5, 16) + " · " + g.move_count + "手 · " + resultText(g.result);
-        row.title = "点击查看完整棋谱";
-        row.addEventListener("click", function () { openGamesLibrary(); });
-        el.gamesList.appendChild(row);
-      });
-    } catch (e) { /* 静默 */ }
-  }
+  // ---------------- 棋谱管理 ----------------
+  function resultText(r) { return { win: "胜", lose: "负", draw: "和" }[r] || "未结束"; }
+  function resultCls(r) { return { win: "s-win", lose: "s-lose", draw: "s-draw" }[r] || "s-none"; }
 
-  el.btnGames.addEventListener("click", openGamesLibrary);
-  async function openGamesLibrary() {
-    el.modalTitle.textContent = "棋谱库";
-    el.modalBody.innerHTML = "<div class='muted'>加载中…</div>";
-    el.modalMask.classList.remove("hidden");
+  el.btnRefreshRecords.addEventListener("click", renderRecords);
+  async function renderRecords() {
+    if (!userId()) return;
+    el.recordsList.className = "";
+    el.recordsList.innerHTML = "<div class='muted'>加载中…</div>";
     try {
       const res = await API.listGames(userId());
       if (!res.games || res.games.length === 0) {
-        el.modalBody.innerHTML = "<div class='muted'>暂无棋谱（下完一局后自动保存）</div>";
+        el.recordsList.innerHTML = "<div class='muted'>暂无棋谱（下完一局后自动保存）</div>";
         return;
       }
-      el.modalBody.innerHTML = res.games.map(function (g) {
-        return "<div class='game-row' data-gid='" + g.game_id + "'>" +
-          (g.created_at || "").slice(0, 16) + " · " + g.move_count + "手 · " + resultText(g.result) +
-          "</div>";
-      }).join("");
-      el.modalBody.querySelectorAll(".game-row").forEach(function (row) {
-        row.addEventListener("click", function () { showGameMoves(row.getAttribute("data-gid")); });
+      el.recordsList.innerHTML = "";
+      res.games.forEach(function (g) {
+        const row = document.createElement("div");
+        row.className = "record-row";
+        row.innerHTML =
+          "<span class='rec-state " + resultCls(g.result) + "'>" + resultText(g.result) + "</span>" +
+          "<span class='rec-star'>" + (g.starred ? "⭐" : "☆") + "</span>" +
+          "<span class='rec-date'>" + (g.created_at || "").slice(0, 16) + "</span>" +
+          "<span class='rec-moves'>" + g.move_count + " 手</span>" +
+          "<button class='mini-btn' data-act='view'>查看</button>" +
+          "<button class='mini-btn' data-act='star'>" + (g.starred ? "取消加精" : "加精") + "</button>" +
+          "<button class='mini-btn danger-btn' data-act='del'>删除</button>";
+        row.querySelector("[data-act=view]").addEventListener("click", function () { showGameMoves(g.game_id); });
+        row.querySelector("[data-act=star]").addEventListener("click", async function () {
+          try { await API.starGame(g.game_id, !g.starred); renderRecords(); }
+          catch (e) { alert("加精失败：" + e.message); }
+        });
+        row.querySelector("[data-act=del]").addEventListener("click", async function () {
+          if (!window.confirm("删除这局棋谱？")) return;
+          try { await API.deleteGame(g.game_id); renderRecords(); }
+          catch (e) { alert("删除失败：" + e.message); }
+        });
+        el.recordsList.appendChild(row);
       });
-    } catch (err) {
-      el.modalBody.innerHTML = "<div class='muted'>棋谱库加载失败：" + err.message + "</div>";
+    } catch (e) {
+      el.recordsList.innerHTML = "<div class='muted'>棋谱加载失败：" + esc(e.message) + "</div>";
     }
   }
 
   async function showGameMoves(gameId) {
     el.modalTitle.textContent = "棋谱 " + gameId;
     el.modalBody.innerHTML = "<div class='muted'>加载中…</div>";
+    el.modalMask.classList.remove("hidden");
     try {
       const res = await API.gameMoves(gameId);
       if (!res.moves || res.moves.length === 0) {
@@ -532,16 +657,69 @@
       }).join("");
       el.modalBody.innerHTML = rows;
     } catch (err) {
-      el.modalBody.innerHTML = "<div class='muted'>棋谱加载失败：" + err.message + "</div>";
+      el.modalBody.innerHTML = "<div class='muted'>棋谱加载失败：" + esc(err.message) + "</div>";
     }
   }
 
+  // ---------------- 通用设置 ----------------
+  async function renderSettings() {
+    const u = currentUser();
+    el.accountName.textContent = u ? "当前账号：" + u.nickname : "-";
+    try {
+      const res = await API.listModels();
+      el.modelList.innerHTML = "";
+      res.models.forEach(function (m) {
+        const d = document.createElement("div");
+        d.className = "model-row";
+        d.innerHTML = "<span>" + esc(m.label) + "</span>" + (m.current ? "<span class='tag'>当前</span>" : "");
+        d.addEventListener("click", async function () {
+          if (m.current) return;
+          if (!window.confirm("切换模型为「" + m.label + "」？")) return;
+          try { await API.switchModel(m.id); renderSettings(); }
+          catch (e) { alert("切换失败：" + e.message); }
+        });
+        el.modelList.appendChild(d);
+      });
+    } catch (e) {
+      el.modelList.innerHTML = "<div class='muted'>模型加载失败</div>";
+    }
+  }
+
+  el.btnRename.addEventListener("click", renameAccount);
+  async function renameAccount() {
+    const nick = el.renameNickname.value.trim();
+    if (!nick) return;
+    try {
+      const u = await API.renameUser(userId(), nick);
+      saveUser(u);
+      el.userLabel.textContent = u.nickname;
+      el.renameNickname.value = "";
+      renderSettings();
+      alert("昵称已改为：" + u.nickname);
+    } catch (e) { alert("改名失败：" + e.message); }
+  }
+
+  el.btnDeleteAccount.addEventListener("click", deleteAccount);
+  async function deleteAccount() {
+    if (!window.confirm("确定删除当前账号及其全部棋谱、记忆？此操作不可恢复！")) return;
+    try {
+      await API.deleteUser(userId());
+      logout();
+    } catch (e) { alert("删除失败：" + e.message); }
+  }
+
+  // ---------------- 模态 ----------------
   el.modalClose.addEventListener("click", function () { el.modalMask.classList.add("hidden"); });
   el.modalMask.addEventListener("click", function (e) {
     if (e.target === el.modalMask) el.modalMask.classList.add("hidden");
   });
 
-  // 启动
-  newGame();
-  refreshGamesList();
+  // ---------------- 启动 ----------------
+  const saved = currentUser();
+  if (saved && saved.user_id) {
+    loginAs(saved);
+  } else {
+    showView("login");
+    renderLoginUsers();
+  }
 })();
