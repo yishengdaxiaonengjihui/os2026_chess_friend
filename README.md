@@ -48,6 +48,13 @@
 | 📖 棋谱库 | 对局自动落库，随时回看逐手棋谱与事件（含胜负） |
 | 🎭 人格切换 | 老张/小雅人格随时切换，后端同步 LLM 人设并重置聊天记忆 |
 | ♟️ 送吃保护 | 走棋后老帅受攻的着法被过滤并友好提示；结局只余将死/被将死/和棋 |
+| 🗣️ 言语触发决策 | 落子不一定说话：强事件（将军/吃子/胜负）约 85% 发言、弱事件约 15%，带冷却与「连续 8 步必说一句」保底，避免 AI 话痨或冷场 |
+| 🎲 走法多样性 | 开局库加权随机选着 + 中局在候选着中按胜率加权随机（非总走深搜最优），让棋友风格更像真人 |
+| 🧹 输入过滤 | 语音/文字噪音（过短、纯标点表情、语气词）直接忽略；连续消息只响应最新一条，避免误触发刷屏 |
+| 💬 闲聊三档 | 通用设置可选 安静/普通/爱聊天，Prompt 注入对应对话风格，控制 AI 唠嗑频率 |
+| 🪶 轻量人格 | 人格设定外置 personas.json：梗概常驻 + 故事 JSON 占位，改 JSON 即可换人设，无需改代码 |
+| 📖 主动叙事框架 | 判断开场/长时间静默/关键事件后是否该主动讲小故事（框架就绪，内容生成默认静默不打断对局） |
+| 🔑 双凭证 | 小雅使用独立的魔珐星云 AppId/AppSecret（按人格分叉），切换人格时前端用对应凭证重建数字人会话 |
 | 📴 降级开关 | `ENABLE_DIGITAL_HUMAN=false` 时完整保留象棋、对话、记忆逻辑，仅不渲染 3D 数字人 |
 
 ## 技术架构
@@ -114,6 +121,10 @@ os2026_chess_friend/
 │   │   │   ├── memory_manager.py
 │   │   │   ├── prompt_builder.py
 │   │   │   ├── llm_client.py
+│   │   │   ├── speech_trigger_decider.py # 言语触发决策（落子是否说话）
+│   │   │   ├── input_filter.py           # 输入过滤（噪音/连续消息去抖）
+│   │   │   ├── persona_store.py          # 轻量人格仓库（personas.json）
+│   │   │   ├── narrative_driver.py       # 主动叙事框架（占位）
 │   │   │   ├── avatar_dispatcher.py        # 具身指令分发器(状态机/表演队列/打断)
 │   │   │   ├── xmov_client.py              # 星云协议适配层(情绪/动作映射+SSML)+时序调度
 │   │   │   └── ws_hub.py                   # 对局 WebSocket 事件中心(数字人状态/棋局事件)
@@ -160,9 +171,12 @@ docker compose up -d
 | 变量 | 说明 |
 | --- | --- |
 | `LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL` | 大模型（OpenAI 兼容协议）。默认火山方舟 `doubao-seed-2.0-mini`（`LLM_THINKING_OFF=1` 关闭思考模式），可换 GLM/Qwen 等 |
-| `XMOV_APP_ID` / `XMOV_APP_SECRET` | 魔珐星云 SDK 鉴权（真机联调启用） |
+| `XMOV_APP_ID` / `XMOV_APP_SECRET` | 魔珐星云 SDK 鉴权（真机联调启用）—— 老张 |
+| `XMOV_XIAOYA_APP_ID` / `XMOV_XIAOYA_APP_SECRET` | 小雅的独立星云凭证（双凭证按人格分叉；留空则回退老张凭证） |
 | `XMOV_LAOZHANG_*` / `XMOV_XIAOYA_*` | 星云形象/音色资产 ID |
 | `ENABLE_DIGITAL_HUMAN` | 数字人模块总开关，默认 `true` |
+| `SPEECH_TRIGGER_ENABLED` | 言语触发决策总开关，默认 `true`（关闭后落子每次都发言） |
+| `ENGINE_DIVERSITY` / `ENGINE_DIVERSITY_PROB` / `ENGINE_DIVERSITY_OPENING` | 引擎走法多样性：总开关 / 中局加权随机概率（默认 0.45）/ 开局加权随机是否启用 |
 
 ## 开源贡献边界
 
@@ -173,11 +187,15 @@ docker compose up -d
 - `chess_context_parser`：棋局状态解析，引擎原始输出 → 结构化博弈上下文
 - `chess_engine`：象棋引擎适配层（FEN <-> 棋盘转换、AI 应手、评估/胜率、将军/将死判定）
 - `memory_manager`：分层记忆适配器（短期 / Mem0 长期 / SQLite 结构化画像）
-- `prompt_builder`：五层 Prompt 组装器
+- `prompt_builder`：五层 Prompt 组装器（人格梗概 + 闲聊偏好注入）
+- `speech_trigger_decider`：言语触发决策（强/弱事件发言概率、冷却、连续静默保底）
+- `input_filter`：输入过滤（噪音判定 + 连续消息只响应最新）
+- `persona_store` / `personas.json`：轻量人格仓库（梗概常驻 + 外置故事占位）
+- `narrative_driver`：主动叙事框架（占位）
 - `avatar_dispatcher`：具身指令分发器（表演队列、状态机、语音打断）
 - `xmov_client`：魔珐星云协议适配层（情绪/动作映射、SSML 组装）+ 表演时序调度
 - `ws_hub`：对局 WebSocket 事件中心（数字人状态 / 棋局事件实时推送）
-- `avatar-adapter.js`：前端数字人适配层（星云 SDK 优先，Web Speech 朗读降级）
+- `avatar-adapter.js`：前端数字人适配层（星云 SDK 优先，Web Speech 朗读降级；队列调度 + 情绪超时重置 + 按人格双凭证重建）
 - Docker-Compose 部署、降级开关、适老化业务逻辑
 
 ### 🔁 复用依赖（MIT / Apache-2.0 兼容）
@@ -203,7 +221,7 @@ docker compose up -d
 - [x] **第一阶段（基础打通，引擎已接入）**：棋局解析模块、LLM 链路、基础台词输出 ✅；象棋引擎 AI 应手/评估/胜负判定 ✅；**前端棋盘 + FastAPI 联调 ✅（自研 vanilla JS 前端，同源服务）**
 - [x] **第二阶段（记忆画像）**：分层记忆 ✅（短期会话 + 长期记忆适配器，未装 mem0 时自动降级 SQLite 子串召回）；**SQLite 画像读写与 diff 更新 ✅**（对局统计实时累加、开局/棋风/棋力识别、对局终结胜负落盘、长期记忆摘要）
 - [x] **第三阶段（数字人链路）**：具身指令分发器状态机 ✅（IDLE/THINKING/SPEAKING + 表演队列 + 语音打断）；星云协议适配层 ✅（情绪→SDK emotion 枚举、动作→KA 关键动作、SSML 组装）；对局 WS 事件中心 ✅（后端推 thinking/speaking/idle + 棋局事件）；前端数字人适配层 ✅（星云 XmovAvatar litesdk 优先，Web Speech 中文朗读/文字降级）；**待真机**：加载 litesdk 后在浏览器渲染 3D 数字人（需在可联网环境）
-- [ ] **第四阶段（打磨交付）**：交互打磨已完成 ✅（悔棋、棋谱库、人格切换、送吃保护与三结局兜底、AI 思考改为"让我想想…"）；剩余：Prompt 调优、Docker-Compose 可复现、演示录屏、PDF 文档
+- [ ] **第四阶段（打磨交付）**：交互打磨已完成 ✅（悔棋、棋谱库、人格切换、送吃保护与三结局兜底、AI 思考改为"让我想想…"）；**交互大改造已完成 ✅**（言语触发决策、数字人队列调度与情绪超时、引擎走法多样性、输入过滤、闲聊三档偏好、轻量人格、主动叙事框架、双凭证小雅）；剩余：Prompt 调优、Docker-Compose 可复现、演示录屏、PDF 文档
 - [ ] **第五阶段**：10-11 前打包提交赛事（oscc@oschina.cn）
 
 ## 免责声明

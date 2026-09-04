@@ -17,9 +17,9 @@
     return resp.json();
   }
 
-  function jsonBody(data) {
+  function jsonBody(data, method) {
     return {
-      method: "POST",
+      method: method || "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     };
@@ -43,13 +43,13 @@
       return request("/api/users/login", jsonBody({ user_id: userId }));
     },
     async renameUser(userId, nickname) {
-      return request("/api/users/" + encodeURIComponent(userId), jsonBody({ nickname: nickname }));
+      return request("/api/users/" + encodeURIComponent(userId), jsonBody({ nickname: nickname }, "PATCH"));
     },
     async deleteUser(userId) {
       return request("/api/users/" + encodeURIComponent(userId), { method: "DELETE" });
     },
     async setChatPref(userId, chatPref) {
-      return request("/api/users/" + encodeURIComponent(userId) + "/chat-pref", jsonBody({ chat_pref: chatPref }));
+      return request("/api/users/" + encodeURIComponent(userId) + "/chat-pref", jsonBody({ chat_pref: chatPref }, "PATCH"));
     },
     // ---- 棋谱管理 ----
     async starGame(gameId, starred) {
