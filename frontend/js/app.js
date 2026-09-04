@@ -401,6 +401,7 @@
           appSecret: x.app_secret,
           gateway: x.gateway,
         });
+        window.__avatarAdapter = avatarAdapter; // 调试/验证口：CDP 检查队列与情绪超时
         avatarAdapter.onState = function (s) { setDhState(s); };
         avatarAdapter.onEmotionReset = function () {
           // 问题11：情绪超时自动重置为平静
