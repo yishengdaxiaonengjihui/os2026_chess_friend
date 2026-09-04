@@ -30,6 +30,7 @@ from ..core import (
 )
 from ..core.chess_engine import ai_move, legal_moves, position_status, score_to_win_prob
 from ..core.term_filter import sanitize_speech
+from ..core.input_filter import InputFilter, is_noise
 from ..core.memory_manager import detect_personal_info
 from ..core.speech_trigger_decider import classify_strength, should_speak
 from ..core.model_registry import get_runtime_model, list_models, set_runtime_model
@@ -578,10 +579,24 @@ def user_game_moves(game_id: str) -> dict:
 
 @router.post("/api/interrupt")
 def interrupt(req: InterruptRequest) -> dict:
-    """用户语音打断：终止数字人当前表演，清空队列。"""
+    """用户语音打断：终止数字人当前表演，清空队列。
+
+    问题3：输入过滤 ——
+    - 噪音判定：过短/纯标点/语气词输入直接忽略（不打断、不入记忆）。
+    - 连续消息只响应最新：去抖窗口内连续输入仅保留最新一条（覆盖旧输入）。
+    """
     sess = _sessions.get(req.game_id)
     if not sess:
         raise HTTPException(status_code=404, detail="game_id 不存在")
+    # 问题3：噪音判定
+    if is_noise(req.transcript):
+        return {"status": "noise_ignored", "reason": "noise", "queue_cleared": False}
+    # 问题3：连续消息去抖（仅最新生效）
+    gate = sess.setdefault("input_filter", InputFilter())
+    verdict = gate.check(req.transcript)
+    if verdict == "dedup":
+        sess["memory"].short_term.replace_last_user(f"（用户打断）{req.transcript}")
+        return {"status": "coalesced", "reason": "dedup", "queue_cleared": True}
     sess["dispatcher"].interrupt()
     sess["memory"].remember_turn("user", f"（用户打断）{req.transcript}")
     # 问题9：仅用户主动透露个人信息时写入长期记忆

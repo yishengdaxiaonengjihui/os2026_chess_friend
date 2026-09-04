@@ -156,3 +156,35 @@ def test_games_library_endpoints():
     assert moves[0]["user_move"]["from"] == mv["from"]
     assert moves[0]["move_index"] == 1
     routes._sessions.pop(g["game_id"], None)
+
+
+def test_interrupt_input_filter():
+    """问题3：interrupt 端点接入输入过滤 —— 噪音忽略、连续消息合并、正常输入生效。"""
+    from backend.app.api import routes
+
+    uid = "u-inp"
+    g = client.post("/api/games", json={"user_id": uid}).json()
+    gid = g["game_id"]
+
+    # 噪音输入：不打断、不入记忆
+    r = client.post("/api/interrupt", json={"game_id": gid, "user_id": uid, "transcript": "。。。🤣"})
+    assert r.status_code == 200
+    assert r.json()["status"] == "noise_ignored"
+    assert r.json()["queue_cleared"] is False
+
+    # 正常输入：打断生效
+    r = client.post("/api/interrupt", json={"game_id": gid, "user_id": uid, "transcript": "这一步该走炮"})
+    assert r.status_code == 200
+    assert r.json()["status"] == "interrupted"
+    assert r.json()["queue_cleared"] is True
+
+    # 连续消息（同会话 2.5s 内再次输入）：合并为 dedup，只保留最新
+    r = client.post("/api/interrupt", json={"game_id": gid, "user_id": uid, "transcript": "不对，是走马"})
+    assert r.status_code == 200
+    assert r.json()["status"] in ("coalesced", "dedup", "interrupted")
+    # 记忆中最新的用户输入应为最新一条
+    sess = routes._sessions[gid]
+    user_msgs = [t.content for t in sess["memory"].short_term.turns if t.role == "user"]
+    assert user_msgs[-1].endswith("走马")
+
+    routes._sessions.pop(gid, None)

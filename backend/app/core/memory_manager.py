@@ -36,6 +36,15 @@ class ShortTermMemory:
         if len(self.turns) > self.max_turns:
             self.turns = self.turns[-self.max_turns:]
 
+    def replace_last_user(self, content: str) -> None:
+        """问题3：连续消息只响应最新 —— 覆盖/去重最后一条用户输入，
+        避免同一时刻的重复语音/连续消息污染对话上下文。"""
+        for i in range(len(self.turns) - 1, -1, -1):
+            if self.turns[i].role == "user":
+                self.turns[i].content = content
+                return
+        self.add("user", content)
+
     def to_openai_messages(self) -> list[dict]:
         return [{"role": t.role, "content": t.content} for t in self.turns]
 
