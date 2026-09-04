@@ -251,7 +251,7 @@
       } else {
         el.avatar.style.opacity = "1";
         setDhState("idle");
-        initAvatarAdapter(true);
+        initAvatarAdapter(true, personality);
         connectDhWs(game.game_id);
       }
     } catch (err) {
@@ -392,18 +392,28 @@
   let dhWs = null;
   let avatarAdapter = null;
 
-  function initAvatarAdapter(dhEnabled) {
-    if (avatarAdapter || !dhEnabled || !window.AvatarAdapter) return;
+  function initAvatarAdapter(dhEnabled, personality) {
+    personality = personality || "laozhang";
+    if (!dhEnabled || !window.AvatarAdapter) return;
+    // 双凭证（问题14）：人格切换后必须用该人格的 AppId/AppSecret 重建会话
+    if (avatarAdapter) {
+      if (avatarAdapter._personality === personality) return; // 同一人格无需重建
+      try { avatarAdapter.dispose(); } catch (e) { /* 忽略 */ }
+      avatarAdapter = null;
+      window.__avatarAdapter = null;
+    }
     fetch("/api/info")
       .then(function (r) { return r.json(); })
       .then(function (info) {
         var x = info.xmov || {};
-        if (!x.app_id) { setDhState("off"); return; }
+        var cred = (x.personalities && x.personalities[personality]) || x;
+        if (!cred.app_id) { setDhState("off"); return; }
         avatarAdapter = new AvatarAdapter({
-          appId: x.app_id,
-          appSecret: x.app_secret,
-          gateway: x.gateway,
+          appId: cred.app_id,
+          appSecret: cred.app_secret,
+          gateway: x.gateway || cred.gateway,
         });
+        avatarAdapter._personality = personality; // 记录当前人格（供切换重建判断）
         window.__avatarAdapter = avatarAdapter; // 调试/验证口：CDP 检查队列与情绪超时
         avatarAdapter.onState = function (s) { setDhState(s); };
         avatarAdapter.onEmotionReset = function () {

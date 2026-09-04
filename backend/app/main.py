@@ -50,21 +50,40 @@ app.include_router(router)
 
 @app.get("/api/info")
 def info() -> dict:
+    s = SETTINGS
     return {
         "name": "适老化数字人中国象棋棋友",
         "version": "0.2.0",
         "docs": "/docs",
         "health": "/health",
-        "llm_mode": "mock" if SETTINGS.llm_configured is False else "real",
-        "digital_human_enabled": SETTINGS.enable_digital_human,
+        "llm_mode": "mock" if s.llm_configured is False else "real",
+        "digital_human_enabled": s.enable_digital_human,
         "xmov": {
-            "app_id": SETTINGS.xmov_app_id,
-            "app_secret": SETTINGS.xmov_app_secret,
-            "gateway": SETTINGS.xmov_ws_url,
-            "configured": SETTINGS.xmov_configured,
+            # 兼容键：老张凭证（前端旧逻辑直接读 app_id/app_secret）
+            "app_id": s.xmov_app_id,
+            "app_secret": s.xmov_app_secret,
+            "gateway": s.xmov_ws_url,
+            "configured": s.xmov_configured,
+            # 双凭证（问题14）：按人格分叉的 AppId/AppSecret
+            "personalities": {
+                "laozhang": {
+                    "app_id": s.xmov_app_id,
+                    "app_secret": s.xmov_app_secret,
+                    "configured": s.xmov_configured,
+                    "avatar": s.xmov_laozhang_avatar,
+                    "voice": s.xmov_laozhang_voice,
+                },
+                "xiaoya": {
+                    "app_id": s.xmov_xiaoya_app_id or s.xmov_app_id,
+                    "app_secret": s.xmov_xiaoya_app_secret or s.xmov_app_secret,
+                    "configured": s.xmov_xiaoya_configured or s.xmov_configured,
+                    "avatar": s.xmov_xiaoya_avatar,
+                    "voice": s.xmov_xiaoya_voice,
+                },
+            },
             "avatars": {
-                "laozhang": {"avatar": SETTINGS.xmov_laozhang_avatar, "voice": SETTINGS.xmov_laozhang_voice},
-                "xiaoya": {"avatar": SETTINGS.xmov_xiaoya_avatar, "voice": SETTINGS.xmov_xiaoya_voice},
+                "laozhang": {"avatar": s.xmov_laozhang_avatar, "voice": s.xmov_laozhang_voice},
+                "xiaoya": {"avatar": s.xmov_xiaoya_avatar, "voice": s.xmov_xiaoya_voice},
             },
         },
     }

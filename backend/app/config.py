@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     xmov_app_id: str = ""
     xmov_app_secret: str = ""
     xmov_ws_url: str = "https://nebula-agent.xingyun3d.com/user/v1/ttsa/session"
+    # 双凭证（按人格分叉）：小雅有独立的 AppId/AppSecret 资产
+    xmov_xiaoya_app_id: str = ""
+    xmov_xiaoya_app_secret: str = ""
     xmov_laozhang_avatar: str = "AM032_V2_14200_new"
     xmov_laozhang_voice: str = "XMOV_HN_TTS__36"
     xmov_xiaoya_avatar: str = "AF045_8752_new"
@@ -63,6 +66,10 @@ class Settings(BaseSettings):
     @property
     def xmov_configured(self) -> bool:
         return bool(self.xmov_app_id) and bool(self.xmov_app_secret)
+
+    @property
+    def xmov_xiaoya_configured(self) -> bool:
+        return bool(self.xmov_xiaoya_app_id) and bool(self.xmov_xiaoya_app_secret)
 
 
 @lru_cache
