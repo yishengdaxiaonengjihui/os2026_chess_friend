@@ -31,6 +31,7 @@ from ..core import (
 from ..core.chess_engine import ai_move, legal_moves, position_status, score_to_win_prob
 from ..core.term_filter import sanitize_speech
 from ..core.input_filter import InputFilter, is_noise
+from ..core.narrative_driver import NarrativeContext, build_narrative, narrate
 from ..core.memory_manager import detect_personal_info
 from ..core.speech_trigger_decider import classify_strength, should_speak
 from ..core.model_registry import get_runtime_model, list_models, set_runtime_model
@@ -424,6 +425,22 @@ def make_move(req: MoveRequest) -> MoveResponse:
         avatar_cmd = sess["dispatcher"].think_only()
         sess["silent_streak"] = sess.get("silent_streak", 0) + 1
 
+    # 问题4：主动叙事框架（占位）—— 判断是否到了该主动讲小故事的时机；
+    # 当前 build_narrative 默认返回空串（不打断对局），仅把决策结果透出给前端。
+    n_ctx = NarrativeContext(
+        move_index=sess["move_index"],
+        game_over=sess["game_over"],
+        is_opening=sess["move_index"] <= 2,
+        quiet_seconds=(time.time() - sess["last_speech_ts"]) if sess.get("last_speech_ts") else 999.0,
+        has_event=bool(events),
+        personality=sess["personality"],
+    )
+    n_type = narrate(n_ctx)
+    narrative_text = build_narrative(n_type, n_ctx)  # 占位：默认空
+    if narrative_text:
+        # 框架未来接入故事后：入记忆 + 交给数字人播报
+        sess["memory"].remember_turn("assistant", narrative_text)
+
     # 12) 落盘棋谱 + 对局事件广播（供前端实时感知）
     append_move_record(sess["game_id"], sess["move_index"], user_move.to_dict(), engine_res, ai_new_fen, events)
     ws_hub.broadcast_game_event(sess["game_id"], "move")
@@ -440,6 +457,7 @@ def make_move(req: MoveRequest) -> MoveResponse:
         avatar_command=avatar_cmd,
         long_term_memories=recall["long_term"],
         profile=profile,
+        narrative={"type": n_type.value, "text": narrative_text},
     )
 
 

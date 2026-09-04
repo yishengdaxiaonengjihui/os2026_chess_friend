@@ -73,6 +73,8 @@ class MoveResponse(BaseModel):
     avatar_command: Optional[dict[str, Any]] = None
     long_term_memories: list[str]
     profile: dict[str, Any]
+    # 问题4：主动叙事框架（占位）—— 透出叙事决策结果，内容当前为空
+    narrative: Optional[dict[str, Any]] = None
 
 
 class ProfileResponse(BaseModel):
