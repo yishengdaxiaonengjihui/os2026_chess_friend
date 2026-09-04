@@ -45,6 +45,27 @@ PERSONALITY_ROLES: dict[str, str] = {
 
 SYSTEM_ROLE = PERSONALITY_ROLES["laozhang"]
 
+# 问题12：闲聊三档偏好 -> 对话风格指令（追加在系统角色后）
+CHAT_PREF_INSTRUCTIONS: dict[str, str] = {
+    "quiet": (
+        "\n\n【闲聊偏好：安静】这位棋友喜欢安静地下棋。平时少说闲话，只在关键棋局节点（将军、吃子、"
+        "胜负）或对方主动搭话时才简短说一句；语气平和，不主动挑起话题。"
+    ),
+    "balanced": (
+        "\n\n【闲聊偏好：普通】像普通棋友一样自然交流：落子时偶尔点评一句，对方搭话就热情回应，"
+        "不主动长篇大论，也不刻意沉默。"
+    ),
+    "chatty": (
+        "\n\n【闲聊偏好：爱聊天】这位棋友喜欢边下棋边唠嗑。多主动说些轻松话（天气、家常、老故事都行），"
+        "经常夸赞对方、营造热闹气氛；但台词仍要简短口语化，不能变成独白。"
+    ),
+}
+
+
+def chat_pref_instruction(pref: str) -> str:
+    """按闲聊偏好返回对话风格指令；未知取值回退普通。"""
+    return CHAT_PREF_INSTRUCTIONS.get(pref, CHAT_PREF_INSTRUCTIONS["balanced"])
+
 
 def system_role_for(personality: str) -> str:
     """按人格返回系统角色；未知人格回退老张。"""
@@ -105,6 +126,7 @@ def build_prompt(
     board_context: Optional[dict[str, Any]] = None,
     short_term_history: Optional[list[dict]] = None,
     system_role: Optional[str] = None,
+    chat_pref: Optional[str] = None,
 ) -> list[dict]:
     """拼装五层 Prompt，返回 OpenAI messages 列表。"""
     layers: list[tuple[str, str]] = [
@@ -115,6 +137,9 @@ def build_prompt(
     ]
 
     system = system_role or SYSTEM_ROLE
+    # 问题12：闲聊三档偏好
+    if chat_pref:
+        system += chat_pref_instruction(chat_pref)
     for title, body in layers[:3]:
         system += f"\n\n{title}\n{body}"
 

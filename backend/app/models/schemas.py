@@ -90,6 +90,10 @@ class PersonalityRequest(BaseModel):
     personality: str = Field(..., description="人格：laozhang / xiaoya")
 
 
+class ChatPrefRequest(BaseModel):
+    chat_pref: str = Field(..., description="闲聊偏好：quiet / balanced / chatty")
+
+
 class UndoResponse(BaseModel):
     status: str
     fen: str

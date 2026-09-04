@@ -48,6 +48,9 @@
     async deleteUser(userId) {
       return request("/api/users/" + encodeURIComponent(userId), { method: "DELETE" });
     },
+    async setChatPref(userId, chatPref) {
+      return request("/api/users/" + encodeURIComponent(userId) + "/chat-pref", jsonBody({ chat_pref: chatPref }));
+    },
     // ---- 棋谱管理 ----
     async starGame(gameId, starred) {
       return request("/api/games/" + gameId + "/star", jsonBody({ starred: starred }));

@@ -58,6 +58,7 @@ from ..db.database import (
     remove_last_move_record,
     rename_user as rename_user_db,
     save_game_record,
+    set_chat_pref as set_chat_pref_db,
     set_game_starred,
 )
 from ..models.schemas import (
@@ -73,6 +74,7 @@ from ..models.schemas import (
     ProfileResponse,
     StarRequest,
     UndoResponse,
+    ChatPrefRequest,
     UserCreateRequest,
     UserLoginRequest,
     UserRenameRequest,
@@ -103,6 +105,9 @@ def _new_session(
     # 跨对局累加的统计：从既有画像读取，无则新建
     profile = memory.profile_store.get(user_id)
     stats = profile.get("stats") or fresh_stats()
+    # 问题12：用户闲聊偏好（会话内快照，切后端设置下次开局生效）
+    u = get_user(user_id)
+    chat_pref = (u or {}).get("chat_pref") or "balanced"
     sess = {
         "session_id": session_id,
         "game_id": game_id,
@@ -115,6 +120,7 @@ def _new_session(
         "move_index": 0,
         "game_over": False,
         "stats": stats,
+        "chat_pref": chat_pref,
         # 问题1：言语触发决策状态（冷却 + 静默计数 + 上一步胜率）
         "last_speech_ts": None,
         "silent_streak": 0,
@@ -397,6 +403,7 @@ def make_move(req: MoveRequest) -> MoveResponse:
             board_context=ctx,
             short_term_history=recall["short_term"],
             system_role=system_role_for(sess["personality"]),
+            chat_pref=sess.get("chat_pref"),
         )
         llm_out = _llm.chat(messages)
         # 问题5：第四层正则兜底，彻底清除坐标/记谱等机械话术
@@ -635,6 +642,15 @@ def rename_account(user_id: str, req: UserRenameRequest) -> dict:
         return rename_user_db(user_id, req.nickname)
     except ValueError:
         raise HTTPException(status_code=404, detail="账号不存在")
+
+
+@router.patch("/api/users/{user_id}/chat-pref")
+def set_user_chat_pref(user_id: str, req: ChatPrefRequest) -> dict:
+    """通用设置：闲聊三档偏好（quiet 安静 / balanced 普通 / chatty 爱聊天）。"""
+    try:
+        return set_chat_pref_db(user_id, req.chat_pref)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.delete("/api/users/{user_id}")

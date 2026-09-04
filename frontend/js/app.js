@@ -66,6 +66,9 @@
     btnRename: document.getElementById("btn-rename"),
     btnDeleteAccount: document.getElementById("btn-delete-account"),
     modelList: document.getElementById("model-list"),
+    setChatPref: document.getElementById("set-chat-pref"),
+    btnSaveChatPref: document.getElementById("btn-save-chat-pref"),
+    chatPrefMsg: document.getElementById("chat-pref-msg"),
     // 模态
     modalMask: document.getElementById("modal-mask"),
     modalTitle: document.getElementById("modal-title"),
@@ -753,6 +756,7 @@
   async function renderSettings() {
     const u = currentUser();
     el.accountName.textContent = u ? "当前账号：" + u.nickname : "-";
+    loadChatPrefIntoSelect(u);
     try {
       const res = await API.listModels();
       el.modelList.innerHTML = "";
@@ -794,6 +798,27 @@
       await API.deleteUser(userId());
       logout();
     } catch (e) { alert("删除失败：" + e.message); }
+  }
+
+  // 问题12：闲聊三档偏好
+  el.btnSaveChatPref.addEventListener("click", saveChatPref);
+  async function saveChatPref() {
+    const pref = el.setChatPref.value;
+    if (!["quiet", "balanced", "chatty"].includes(pref)) return;
+    try {
+      const u = await API.setChatPref(userId(), pref);
+      saveUser(u);
+      el.chatPrefMsg.textContent = "已保存：" + { quiet: "安静", balanced: "普通", chatty: "爱聊天" }[pref] + "（下次开局生效）";
+      el.chatPrefMsg.className = "ok";
+    } catch (e) {
+      el.chatPrefMsg.textContent = "保存失败：" + e.message;
+      el.chatPrefMsg.className = "muted";
+    }
+  }
+
+  function loadChatPrefIntoSelect(u) {
+    if (!el.setChatPref || !u) return;
+    el.setChatPref.value = ["quiet", "balanced", "chatty"].includes(u.chat_pref) ? u.chat_pref : "balanced";
   }
 
   // ---------------- 模态 ----------------

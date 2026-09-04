@@ -90,6 +90,10 @@ def init_db(db_path: str | None = None) -> None:
         cols = [c[1] for c in cur.execute("PRAGMA table_info(games)").fetchall()]
         if cols and "starred" not in cols:
             cur.execute("ALTER TABLE games ADD COLUMN starred INTEGER DEFAULT 0")
+        # 迁移：为老库补 users.chat_pref 列（问题12 闲聊三档偏好，幂等）
+        ucols = [c[1] for c in cur.execute("PRAGMA table_info(users)").fetchall()]
+        if ucols and "chat_pref" not in ucols:
+            cur.execute("ALTER TABLE users ADD COLUMN chat_pref TEXT DEFAULT 'balanced'")
         conn.commit()
     finally:
         conn.close()
@@ -118,12 +122,29 @@ def create_user(nickname: str) -> dict:
 def get_user(user_id: str) -> dict | None:
     conn = get_conn()
     try:
-        row = conn.execute("SELECT user_id, nickname, created_at FROM users WHERE user_id=?", (user_id,)).fetchone()
+        row = conn.execute("SELECT user_id, nickname, created_at, chat_pref FROM users WHERE user_id=?", (user_id,)).fetchone()
     finally:
         conn.close()
     if not row:
         return None
-    return {"user_id": row[0], "nickname": row[1], "created_at": row[2]}
+    return {"user_id": row[0], "nickname": row[1], "created_at": row[2], "chat_pref": row[3] or "balanced"}
+
+
+def set_chat_pref(user_id: str, pref: str) -> dict:
+    """问题12：设置用户闲聊偏好（quiet / balanced / chatty）。"""
+    if pref not in ("quiet", "balanced", "chatty"):
+        raise ValueError("闲聊偏好取值必须为 quiet / balanced / chatty")
+    conn = get_conn()
+    try:
+        cur = conn.execute("UPDATE users SET chat_pref=? WHERE user_id=?", (pref, user_id))
+        conn.commit()
+    finally:
+        conn.close()
+    if cur.rowcount == 0:
+        raise ValueError("账号不存在")
+    u = get_user(user_id)
+    assert u is not None
+    return u
 
 
 def list_users() -> list[dict]:
