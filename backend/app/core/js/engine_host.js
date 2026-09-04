@@ -85,6 +85,92 @@ function respond(obj) {
   console.log(JSON.stringify(obj));
 }
 
+// ---------- 问题8：引擎走法多样性 ----------
+// 开局库：常见开局着法（加权随机）。moveNumber 0/1/2 分别对应红首着、黑应着、红三着。
+// 坐标 [rank, file]：rank0=黑方底部，rank9=红方底部。file0=a .. file8=i。
+const OPENING_LINES = {
+  red: [
+    { w: 6, name: "中炮(炮二平五)", from: [7, 1], to: [7, 4] },
+    { w: 4, name: "仙人指路(兵三进一)", from: [6, 2], to: [5, 2] },
+    { w: 4, name: "飞相(相三进五)", from: [9, 2], to: [7, 4] },
+    { w: 3, name: "跳马(马八进七)", from: [9, 1], to: [7, 0] },
+    { w: 3, name: "上士(士四进五)", from: [9, 3], to: [8, 4] },
+    { w: 2, name: "兵一进一(边兵)", from: [6, 0], to: [5, 0] },
+  ],
+  black: [
+    { w: 5, name: "屏风马(马8进7)", from: [0, 1], to: [2, 0] },
+    { w: 5, name: "顺手炮(炮8平5)", from: [0, 1], to: [0, 4] },
+    { w: 3, name: "跳边马(马8进9)", from: [0, 1], to: [1, 0] },
+    { w: 3, name: "上士(士4进5)", from: [0, 3], to: [1, 4] },
+    { w: 2, name: "卒3进1", from: [3, 2], to: [4, 2] },
+    { w: 2, name: "飞象(象3进5)", from: [0, 2], to: [2, 4] },
+  ],
+};
+
+function weightedPick(candidates, rng) {
+  const r = rng();
+  const total = candidates.reduce((s, c) => s + c.w, 0);
+  let acc = 0;
+  for (const c of candidates) {
+    acc += c.w;
+    if (r < acc / total) return c;
+  }
+  return candidates[candidates.length - 1];
+}
+
+function legalMove(board, from, to) {
+  return logic.getLegalMoves(board, from[0], from[1]).some(
+    (t) => t[0] === to[0] && t[1] === to[1]
+  );
+}
+
+// 开局加权随机：仅在开局阶段（moveNumber<=2）从候选开局库中按权重随机选合法着法。
+function openingDiverseMove(board, color, moveNumber, rng) {
+  if (moveNumber > 2) return null;
+  const lines = color === "red" ? OPENING_LINES.red : OPENING_LINES.black;
+  const legalCands = lines.filter((c) => legalMove(board, c.from, c.to));
+  if (legalCands.length === 0) return null;
+  const pick = weightedPick(legalCands, rng);
+  return { from: pick.from, to: pick.to, opening: pick.name };
+}
+
+// 中局候选加权随机：枚举全部合法着法（用已暴露的 getLegalMovesFiltered），
+// 对每个用 evaluateBoard 打分，取 topN 按权重选择，避免每次都是同一手棋。
+function midgameDiverseMove(board, color, difficulty, rng) {
+  const all = [];
+  for (let r = 0; r < 10; r++) {
+    for (let c = 0; c < 9; c++) {
+      const p = board[r][c];
+      if (p && p.c === color) {
+        const list = logic.getLegalMovesFiltered(board, r, c);
+        for (const t of list) all.push({ from: [r, c], to: t });
+      }
+    }
+  }
+  if (all.length === 0) return null;
+  // 打分：走完后的局面评估（对当前走棋方）
+  const scored = all.map((m) => ({
+    m,
+    s: logic.evaluateBoard(logic.applyMove(board, m.from, m.to), color),
+  }));
+  scored.sort((a, b) => b.s - a.s);
+  // 候选窗口：随棋力增大而收窄（高棋力更少随机，避免太弱）
+  const topN = Math.max(2, Math.min(6, Math.round(8 - difficulty * 0.8)));
+  const candidates = scored.slice(0, topN);
+  const best = candidates[0].s;
+  // 权重：与最优分差越近权重越高（softmax 风格，温差=120）
+  const temp = 120;
+  const weights = candidates.map((c) => Math.exp((c.s - best) / temp));
+  const total = weights.reduce((a, b) => a + b, 0);
+  let r = rng() * total;
+  let chosen = candidates[0];
+  for (let i = 0; i < candidates.length; i++) {
+    r -= weights[i];
+    if (r <= 0) { chosen = candidates[i]; break; }
+  }
+  return { from: chosen.m.from, to: chosen.m.to, score: chosen.s, candidates: topN };
+}
+
 function readInput() {
   const buf = fs.readFileSync(0, "utf8");
   return JSON.parse(buf);
@@ -136,11 +222,29 @@ try {
   } else if (input.action === "ai_move") {
     const board = boardFromFen(input.fen);
     const color = input.color === "black" ? "black" : "red";
-    const mv = logic.getAIMove(board, color, input.difficulty || 3, {
-      useOpeningBook: !!input.useOpeningBook,
-      moveNumber: typeof input.moveNumber === "number" ? input.moveNumber : undefined,
-      timeMs: typeof input.timeMs === "number" ? input.timeMs : null,
-    });
+    const diversity = !!input.diversity;
+    const diversityProb = typeof input.diversityProb === "number" ? input.diversityProb : 0.45;
+    let mv = null;
+
+    // 问题8：开局库加权随机（仅开局阶段且开启多样性）
+    if (diversity && input.diversityOpening !== false &&
+        typeof input.moveNumber === "number" && input.moveNumber <= 2) {
+      mv = openingDiverseMove(board, color, input.moveNumber, Math.random);
+    }
+
+    // 问题8：中局候选加权随机（以概率走「加权候选」而非「深搜最优」）
+    if (!mv && diversity && Math.random() < diversityProb) {
+      mv = midgameDiverseMove(board, color, input.difficulty || 3, Math.random);
+    }
+
+    // 兜底：正常引擎搜索（含原开局库）
+    if (!mv) {
+      mv = logic.getAIMove(board, color, input.difficulty || 3, {
+        useOpeningBook: !!input.useOpeningBook,
+        moveNumber: typeof input.moveNumber === "number" ? input.moveNumber : undefined,
+        timeMs: typeof input.timeMs === "number" ? input.timeMs : null,
+      });
+    }
     if (!mv) {
       respond({ ok: true, move: null, reason: "no-legal-move", legal_move_count: countLegalMoves(board, color) });
       process.exit(0);

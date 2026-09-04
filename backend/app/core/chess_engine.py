@@ -92,14 +92,19 @@ def ai_move(
     time_ms: Optional[int] = None,
     move_number: Optional[int] = None,
     use_opening_book: bool = True,
+    diversity: Optional[bool] = None,
 ) -> dict[str, Any]:
     """让引擎为指定方计算一手棋。
+
+    问题8：引擎走法多样性 —— 开局库加权随机 + 中局候选加权随机，
+    避免每次对局都是同一手棋。diversity=None 时跟随配置 engine_diversity。
 
     返回：{from_sq, to_sq, piece, new_fen, score, win_probability, ...}
     """
     settings = get_settings()
     diff = difficulty or settings.engine_skill
     tms = time_ms if time_ms is not None else (settings.engine_time_ms or None)
+    div = settings.engine_diversity if diversity is None else diversity
     res = _run(
         "ai_move",
         {
@@ -109,6 +114,9 @@ def ai_move(
             "timeMs": tms,
             "moveNumber": move_number,
             "useOpeningBook": use_opening_book,
+            "diversity": div,
+            "diversityProb": settings.engine_diversity_prob,
+            "diversityOpening": settings.engine_diversity_opening,
         },
     )
     mv = res.get("move")

@@ -9,6 +9,7 @@ import pytest
 
 os.environ["LLM_API_KEY"] = ""  # 覆盖 .env，强制 mock 模式
 os.environ["SPEECH_TRIGGER_ENABLED"] = "0"  # 问题1：测试关闭言语触发，保证链路测试确定性
+os.environ["ENGINE_DIVERSITY"] = "0"  # 问题8：测试关闭引擎多样性，保证引擎着法确定性
 os.environ.setdefault("ENABLE_DIGITAL_HUMAN", "true")
 os.environ.setdefault("SQLITE_PATH", "data/test_chess_friend.db")
 

@@ -43,6 +43,11 @@ class Settings(BaseSettings):
     engine_time_ms: int = 0        # 0=引擎默认时间预算
     engine_logic_path: str = ""    # 留空用 vendor 默认路径，可覆盖指定其他 logic.js
 
+    # ---- 引擎走法多样性（问题8）：开局库加权随机 + 中局候选加权随机 ----
+    engine_diversity: bool = True              # 总开关
+    engine_diversity_prob: float = 0.45        # 中局走「加权候选」而非「深搜最优」的概率
+    engine_diversity_opening: bool = True      # 开局阶段是否启用加权随机开局库
+
     # ---- 存储 ----
     sqlite_path: str = "data/chess_friend.db"
     chroma_dir: str = "data/chroma"
