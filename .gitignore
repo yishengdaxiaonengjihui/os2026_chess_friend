@@ -23,3 +23,10 @@ npm-debug.log*
 data/
 .DS_Store
 Thumbs.db
+
+# ---- 测试临时目录（工作区内，避免沙箱拦系统临时目录） ----
+.tmp_pytest_ws/
+.pt/
+.pt3root/
+.tmp_pytest/
+.tmp_pt2/

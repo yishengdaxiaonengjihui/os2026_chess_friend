@@ -185,6 +185,7 @@
   // ---------------- 对局设置 / 开始对局 ----------------
   // 开始对局页 = 只有「对局设置 + 开始对局」；对局室整页独立，点开始对局才出现
   function showSettingsForm() {
+    if (avatarAdapter) avatarAdapter.stop(); // 退出对局：清空语音队列
     el.gameLayout.classList.add("hidden");
     el.menuArea.classList.remove("hidden");
   }
@@ -401,6 +402,10 @@
           gateway: x.gateway,
         });
         avatarAdapter.onState = function (s) { setDhState(s); };
+        avatarAdapter.onEmotionReset = function () {
+          // 问题11：情绪超时自动重置为平静
+          if (el.emotionChip) el.emotionChip.textContent = "情绪 平静";
+        };
         avatarAdapter.onReady = function () {
           el.avatar.style.display = "none";
           el.avatarContainer.classList.remove("hidden");
@@ -457,7 +462,7 @@
     if (state.gameOver) return;
     state.busy = true;
     state.board.setBusy(true);
-    if (avatarAdapter) avatarAdapter.stop(); // 用户落子 = 打断数字人（barge-in）
+    // 问题2：落子属游戏操作，不粗暴打断正在播放的语音；新评论进入适配器队列排队
     const fromSq = fileToSq(state.selected.file, state.selected.rank);
     const toSq = fileToSq(file, rank);
     const optimistic = applyLocalMove(state.fen, fromSq, toSq);
