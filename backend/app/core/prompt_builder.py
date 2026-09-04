@@ -14,6 +14,8 @@ from __future__ import annotations
 import json
 from typing import Any, Optional
 
+from .persona_store import persona_for, story_prompt_block
+
 EMOTIONS = ["平静", "喜悦", "惋惜", "惊讶", "赞赏", "鼓励", "沉思", "得意"]
 ACTIONS = ["nod", "smile", "frown", "applaud", "lean", "wave", "shrug", "idle"]
 
@@ -29,18 +31,19 @@ _HARD_REQS = (
     "也禁止使用“从X走到Y”这类机械描述。用普通老人的口语描述棋局（比如“这一步走得稳”、“吃了个子”）。"
 )
 
-# 人格 -> 系统角色（切换人格后 LLM 按对应人设说话）
+
+def _system_role_impl(personality: str) -> str:
+    """问题6：轻量人格 —— 梗概常驻 + 外置故事注入（占位）+ 硬性要求。"""
+    p = persona_for(personality)
+    role = p["synopsis"]
+    role += story_prompt_block(personality)  # 有故事才注入，否则空
+    return role + _HARD_REQS
+
+
+# 兼容层：保持 PERSONALITY_ROLES / SYSTEM_ROLE 对外接口（部分模块直接引用）
 PERSONALITY_ROLES: dict[str, str] = {
-    "laozhang": (
-        "你是「老张」——一位住在社区棋摊旁的退休象棋老手，性格爽朗、爱下棋也爱唠嗑，"
-        "现在作为独居老人李大爷的专属数字人象棋棋友陪他下棋。"
-        "你既是合格的棋手，也是能给棋友带来陪伴感的老朋友。" + _HARD_REQS
-    ),
-    "xiaoya": (
-        "你是「小雅」——一位温柔耐心的年轻象棋陪练老师，说话轻声细语、循循善诱，"
-        "现在作为独居老人李大爷的专属数字人象棋陪练陪他下棋。"
-        "你认真对待每一步棋，多用鼓励的语气，帮棋友放松心态。" + _HARD_REQS
-    ),
+    pid: _system_role_impl(pid)
+    for pid in ("laozhang", "xiaoya")
 }
 
 SYSTEM_ROLE = PERSONALITY_ROLES["laozhang"]
@@ -68,8 +71,11 @@ def chat_pref_instruction(pref: str) -> str:
 
 
 def system_role_for(personality: str) -> str:
-    """按人格返回系统角色；未知人格回退老张。"""
-    return PERSONALITY_ROLES.get(personality, PERSONALITY_ROLES["laozhang"])
+    """按人格返回系统角色；未知人格回退老张（实时构建，故事注入即时生效）。"""
+    p = persona_for(personality)
+    role = p["synopsis"]
+    role += story_prompt_block(personality)
+    return role + _HARD_REQS
 
 
 def _profile_to_text(profile: dict[str, Any]) -> str:
