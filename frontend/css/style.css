@@ -1,32 +1,57 @@
-/* 适老化数字人中国象棋棋友 —— 前端样式（大字号、高对比，面向老年用户） */
+/* 适老化数字人中国象棋棋友 —— 温暖棋馆风（大字号、高对比，面向老年用户） */
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --bg: #f5efe0;
-  --wood: #d9a05b;
-  --wood-dark: #b47a35;
+  /* 温暖棋馆风主色板：木纹暖调 + 朱红点缀（适老化高对比） */
+  --bg: #f7ecd8;
+  --cream: #fbf6ea;
+  --wood: #d69a52;
+  --wood-dark: #a96f2c;
+  --wood-deep: #6b4526;
   --ink: #3a2a1a;
-  --red: #c0392b;
+  --red: #c0392b;      /* 朱红：红方/强调 */
+  --cinnabar: #b03a2e; /* 深朱红 */
+  --gold: #e8b04b;     /* 暖金 */
   --black: #2c3e50;
-  --accent: #2980b9;
+  --accent: #b03a2e;   /* 强调色改为朱红（原来冷蓝） */
+  --card: #fffdf7;
+  --line: #e8dcc4;
 }
 
 body {
   font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
-  background: linear-gradient(160deg, #f8f2e4 0%, #efe3c8 100%);
+  background:
+    radial-gradient(1200px 500px at 20% -10%, rgba(232,176,75,.18), transparent 60%),
+    linear-gradient(165deg, #f9f0da 0%, #f2e2c0 55%, #ecd3a8 100%);
+  background-attachment: fixed;
   color: var(--ink);
   min-height: 100vh;
 }
+
+/* ---- 主按钮：暖金立体感 + 动效（适老化大字）---- */
+.primary-btn {
+  width: 100%; margin-top: 8px; padding: 13px 0; font-size: 19px;
+  background: linear-gradient(180deg, #f2c46a 0%, var(--gold) 45%, #d99a2b 100%);
+  color: #4a2c0e; border: none; border-radius: 12px; cursor: pointer;
+  font-weight: 700; letter-spacing: 1px;
+  box-shadow: 0 4px 10px rgba(160,105,30,.35), inset 0 1px 0 rgba(255,255,255,.5);
+  transition: transform .12s ease, box-shadow .12s ease, filter .12s ease;
+}
+.primary-btn:hover { filter: brightness(1.06); transform: translateY(-1px); box-shadow: 0 6px 14px rgba(160,105,30,.4), inset 0 1px 0 rgba(255,255,255,.5); }
+.primary-btn:active { transform: translateY(1px) scale(.99); box-shadow: 0 2px 6px rgba(160,105,30,.35); }
+.primary-btn.big { padding: 15px 0; font-size: 21px; }
 
 .topbar {
   display: flex; align-items: center; justify-content: space-between;
   flex-wrap: wrap; gap: 12px;
   padding: 14px 22px;
-  background: #6b4a2b;
+  background: linear-gradient(180deg, var(--wood-deep) 0%, #5c3a20 100%);
   color: #fff;
-  box-shadow: 0 2px 8px rgba(0,0,0,.25);
+  box-shadow: 0 3px 10px rgba(60,35,10,.35);
+  border-bottom: 3px solid var(--gold);
 }
-.topbar h1 { font-size: 22px; font-weight: 700; letter-spacing: 1px; }
+.topbar h1 { font-size: 22px; font-weight: 700; letter-spacing: 1px; text-shadow: 0 1px 2px rgba(0,0,0,.4); }
+.topbar h1 .brand-accent { color: var(--gold); }
 .topbar-actions { display: flex; align-items: center; gap: 10px; font-size: 16px; }
 .topbar-actions select, .topbar-actions button {
   font-size: 17px; padding: 8px 14px; border-radius: 8px; border: none; cursor: pointer;
@@ -95,9 +120,12 @@ body {
   width: 100%;
   max-width: 680px;
   aspect-ratio: 9 / 10;
-  background: var(--wood);
-  border-radius: 10px;
-  box-shadow: 0 6px 20px rgba(0,0,0,.35);
+  background:
+    repeating-linear-gradient(90deg, rgba(0,0,0,.03) 0 2px, transparent 2px 46px),
+    linear-gradient(160deg, #e2ab62 0%, var(--wood) 50%, #c98e45 100%);
+  border: 3px solid var(--wood-deep);
+  border-radius: 12px;
+  box-shadow: 0 10px 26px rgba(90,50,10,.45), inset 0 0 0 1px rgba(255,255,255,.25);
   user-select: none;
 }
 .board svg.grid { position: absolute; inset: 0; width: 100%; height: 100%; }
@@ -134,39 +162,56 @@ body {
 .cell-dot.capture { background: #c0392b; box-shadow: 0 0 0 4px rgba(192,57,43,.4); }
 
 .board-side { width: 100%; max-width: 680px; display: flex; flex-direction: column; gap: 8px; }
-.status { font-size: 18px; font-weight: 600; text-align: center; background: #fff; border-radius: 8px; padding: 8px 12px; box-shadow: 0 1px 3px rgba(0,0,0,.15); }
+.status { font-size: 18px; font-weight: 600; text-align: center; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; box-shadow: 0 1px 4px rgba(120,80,30,.12); }
 .winbar { display: flex; align-items: center; gap: 8px; font-size: 15px; }
 .winbar .bar { flex: 1; height: 14px; background: #333; border-radius: 7px; overflow: hidden; position: relative; }
-#win-fill { width: 50%; height: 100%; background: #c0392b; transition: width .4s ease; }
+#win-fill { width: 50%; height: 100%; background: linear-gradient(90deg, #d64537, var(--cinnabar)); transition: width .4s ease; }
 .side-label.red { color: var(--red); font-weight: 700; }
 .side-label.black { color: var(--black); font-weight: 700; }
 
 .companion { display: flex; flex-direction: column; gap: 14px; }
 .avatar-card {
   display: flex; align-items: center; gap: 14px;
-  background: #fff; border-radius: 14px; padding: 14px;
-  box-shadow: 0 2px 8px rgba(0,0,0,.15);
+  background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 14px;
+  box-shadow: 0 3px 10px rgba(120,80,30,.15);
 }
 .avatar {
   width: 76px; height: 76px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  font-size: 46px; background: linear-gradient(145deg, #ffd9a0, #f0b26a);
-  box-shadow: inset 0 -4px 10px rgba(0,0,0,.2);
+  font-size: 46px; background: linear-gradient(145deg, #ffe3b0, #f0b26a);
+  box-shadow: inset 0 -4px 10px rgba(0,0,0,.2), 0 2px 6px rgba(120,80,30,.25);
 }
 .avatar-name { font-size: 20px; font-weight: 700; }
 .avatar-meta { display: flex; flex-direction: column; gap: 6px; }
-.chip { display: inline-block; font-size: 15px; background: #eef4fb; color: #1f5b8b; border-radius: 20px; padding: 3px 12px; }
+.chip { display: inline-block; font-size: 15px; background: #fdf0d3; color: #8a5a12; border: 1px solid #ecd7a5; border-radius: 20px; padding: 3px 12px; }
 
 .speech {
   font-size: 20px; line-height: 1.5;
-  background: #fff; border-left: 5px solid var(--accent);
-  border-radius: 10px; padding: 14px 16px;
+  background: linear-gradient(180deg, #fffef9 0%, #fdf6e6 100%);
+  border: 2px solid #e5cf9f;
+  border-radius: 16px; padding: 14px 18px;
   min-height: 64px;
-  box-shadow: 0 2px 8px rgba(0,0,0,.12);
+  box-shadow: 0 3px 10px rgba(120,80,30,.18);
+  position: relative;
+}
+/* 聊天气泡小尾巴 */
+.speech::before {
+  content: "";
+  position: absolute;
+  top: -10px; left: 34px;
+  border: 8px solid transparent;
+  border-bottom-color: #e5cf9f;
+}
+.speech::after {
+  content: "";
+  position: absolute;
+  top: -6px; left: 37px;
+  border: 6px solid transparent;
+  border-bottom-color: #fdf6e6;
 }
 
 /* ---- 步骤4：语音/文字对话 ---- */
-.voice-panel { background: #fff; border-radius: 12px; padding: 10px 12px; box-shadow: 0 1px 5px rgba(0,0,0,.1); }
+.voice-panel { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; box-shadow: 0 2px 6px rgba(120,80,30,.12); }
 .voice-bar { display: flex; align-items: center; gap: 12px; }
 .mic-btn {
   width: 64px; height: 64px; border-radius: 50%;
@@ -194,8 +239,8 @@ body {
   min-height: 22px; word-break: break-all;
 }
 
-.panel-section { background: #fff; border-radius: 12px; padding: 12px 14px; box-shadow: 0 1px 5px rgba(0,0,0,.1); }
-.panel-section h3 { font-size: 15px; color: #8a6d3b; margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 6px; }
+.panel-section { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; box-shadow: 0 2px 6px rgba(120,80,30,.12); }
+.panel-section h3 { font-size: 15px; color: var(--cinnabar); margin-bottom: 8px; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
 .panel-section ul { list-style: none; }
 .panel-section li { font-size: 15px; padding: 3px 0; color: var(--ink); }
 .panel-section .muted, .muted { color: #9aa0a6; }
@@ -220,9 +265,9 @@ body {
   stroke-linecap: round;
   animation: trail-fade 1.4s ease forwards;
 }
-.trail.ai { stroke: #1f5b8b; }
+.trail.ai { stroke: #a96f2c; }
 .trail-dot { fill: #e67e22; animation: trail-fade 1.4s ease forwards; }
-.trail-dot.ai { fill: #1f5b8b; }
+.trail-dot.ai { fill: #a96f2c; }
 
 /* ---- 和棋/认输 按钮行 ---- */
 .game-actions {
@@ -234,19 +279,22 @@ body {
   flex: 1;
   padding: 8px 0;
   font-size: 16px;
-  border: 1px solid #b9c6d0;
+  border: 1px solid #d9c79c;
   border-radius: 10px;
-  background: #f2f6f9;
+  background: linear-gradient(180deg, #fffdf7 0%, #f5ebd2 100%);
   cursor: pointer;
+  font-weight: 600; color: #5a3c16;
+  transition: background .12s ease, transform .12s ease;
 }
-.game-actions button:hover { background: #e4edf4; }
+.game-actions button:hover { background: linear-gradient(180deg, #fbe9b8 0%, #f2d890 100%); transform: translateY(-1px); }
 
 .avatar-canvas {
   width: 100%;
   height: 220px;
   border-radius: 12px;
   overflow: hidden;
-  background: #eef3f8;
+  background: linear-gradient(180deg, #f7ecd8 0%, #efe0c0 100%);
+  border: 1px solid var(--line);
 }
 .avatar-canvas.hidden { display: none; }
 
@@ -254,23 +302,25 @@ body {
 .mini-btn {
   padding: 4px 10px;
   font-size: 14px;
-  border: 1px solid #b9c6d0;
+  border: 1px solid #d9c79c;
   border-radius: 8px;
-  background: #f2f6f9;
+  background: #faf3e2;
   cursor: pointer;
+  color: #5a3c16;
+  transition: background .12s ease;
 }
-.mini-btn:hover { background: #e4edf4; }
+.mini-btn:hover { background: #f4e6c2; }
 
 .game-mini {
   padding: 4px 8px;
   margin: 3px 0;
   font-size: 14px;
-  background: #f7fafc;
+  background: #fdf8ec;
   border-radius: 6px;
   cursor: pointer;
-  color: #1f5b8b;
+  color: var(--cinnabar);
 }
-.game-mini:hover { background: #eef4f9; }
+.game-mini:hover { background: #f9eecd; }
 
 .modal-mask {
   position: fixed;
@@ -285,9 +335,10 @@ body {
 .modal {
   width: min(680px, 92vw);
   max-height: 80vh;
-  background: #fff;
-  border-radius: 14px;
-  box-shadow: 0 8px 30px rgba(0,0,0,.3);
+  background: var(--card);
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  box-shadow: 0 10px 34px rgba(60,35,10,.4);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -297,9 +348,10 @@ body {
   justify-content: space-between;
   align-items: center;
   padding: 12px 16px;
-  background: #1f5b8b;
+  background: linear-gradient(180deg, var(--wood-deep) 0%, #5c3a20 100%);
   color: #fff;
   font-weight: 700;
+  border-bottom: 2px solid var(--gold);
 }
 .modal-body {
   padding: 12px 16px;
@@ -309,14 +361,15 @@ body {
 .game-row {
   padding: 8px 10px;
   margin: 4px 0;
-  border: 1px solid #e3eaf0;
+  border: 1px solid var(--line);
   border-radius: 8px;
   cursor: pointer;
+  background: #fdf8ec;
 }
-.game-row:hover { background: #f2f7fb; }
+.game-row:hover { background: #f9eecd; }
 .move-row {
   padding: 5px 4px;
-  border-bottom: 1px dashed #e3eaf0;
+  border-bottom: 1px dashed var(--line);
 }
 .mv-events { color: #c0392b; font-size: 13px; }
 
@@ -327,57 +380,70 @@ body {
 .login-card {
   max-width: 460px;
   margin: 8vh auto 0;
-  background: #fff;
-  border: 1px solid #e3eaf0;
-  border-radius: 16px;
-  box-shadow: 0 6px 24px rgba(0,0,0,.12);
+  background: var(--card);
+  border: 2px solid var(--line);
+  border-radius: 18px;
+  box-shadow: 0 8px 28px rgba(120,80,30,.25);
   padding: 28px 32px;
   text-align: center;
 }
-.login-card h1 { font-size: 24px; color: #1f5b8b; margin-bottom: 8px; }
+.login-card h1 { font-size: 24px; color: var(--cinnabar); margin-bottom: 8px; }
 .login-create { display: flex; gap: 8px; margin: 18px 0 4px; }
 .login-create input {
   flex: 1; padding: 10px 12px; font-size: 17px;
-  border: 1px solid #b9c6d0; border-radius: 10px;
+  border: 1px solid #d9c79c; border-radius: 10px;
 }
 .login-divider { margin: 20px 0 10px; color: #7a8b99; font-size: 14px; }
 .login-users { text-align: left; }
 .user-btn {
   display: flex; justify-content: space-between; align-items: center;
   width: 100%; padding: 12px 14px; margin: 8px 0;
-  font-size: 17px; background: #f2f6f9; border: 1px solid #d8e2ea; border-radius: 10px;
-  cursor: pointer; color: #1f5b8b;
+  font-size: 17px; background: #fdf8ec; border: 1px solid var(--line); border-radius: 12px;
+  cursor: pointer; color: var(--cinnabar);
 }
-.user-btn:hover { background: #e4edf4; }
+.user-btn:hover { background: #f9eecd; }
 .user-btn .u-nick { font-weight: 700; }
 .user-btn .u-meta { color: #7a8b99; font-size: 13px; }
 
 /* ---- 顶栏 / Tab ---- */
 .topbar-user { display: flex; align-items: center; gap: 10px; }
 .user-chip {
-  background: #eef4f9; color: #1f5b8b; font-weight: 700;
+  background: #fbe08c; color: #5c3a10; font-weight: 700;
   padding: 4px 12px; border-radius: 14px;
 }
 .tabs {
-  display: flex; gap: 6px; padding: 10px 16px 0;
-  background: #fff; border-bottom: 1px solid #e3eaf0;
+  display: flex; gap: 10px; padding: 14px 16px 12px;
+  background: linear-gradient(180deg, #fdf8ec 0%, #f7ecd8 100%);
+  border-bottom: 2px solid var(--line);
+  justify-content: center; flex-wrap: wrap;
 }
 .tab {
-  padding: 10px 22px; font-size: 17px; cursor: pointer;
-  background: transparent; border: none; border-bottom: 3px solid transparent;
-  color: #5a6b7a; font-weight: 700;
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 26px; font-size: 18px; cursor: pointer;
+  background: #fffdf7; border: 2px solid var(--line); border-radius: 16px;
+  color: #6a4a22; font-weight: 700;
+  box-shadow: 0 2px 6px rgba(120,80,30,.12);
+  transition: transform .12s ease, box-shadow .12s ease, background .12s ease, border-color .12s ease;
 }
-.tab.active { color: #1f5b8b; border-bottom-color: #1f5b8b; }
+.tab:hover { transform: translateY(-2px); box-shadow: 0 5px 12px rgba(120,80,30,.2); }
+.tab.active {
+  color: #4a2c0e;
+  background: linear-gradient(180deg, #fbe08c 0%, var(--gold) 100%);
+  border-color: #d99a2b;
+  box-shadow: 0 4px 12px rgba(180,120,30,.4), inset 0 1px 0 rgba(255,255,255,.5);
+}
+.tab-icon { font-size: 24px; line-height: 1; }
 .tab-body { padding: 16px; }
 .tab-body.hidden { display: none; }
 
 /* ---- 对局设置 / 通用设置 ---- */
 .settings-panel {
   max-width: 520px; margin: 8px auto 0;
-  background: #fff; border: 1px solid #e3eaf0; border-radius: 14px;
+  background: var(--card); border: 2px solid var(--line); border-radius: 16px;
   padding: 22px 26px;
+  box-shadow: 0 4px 16px rgba(120,80,30,.15);
 }
-.settings-panel h2 { color: #1f5b8b; margin: 0 0 16px; }
+.settings-panel h2 { color: var(--cinnabar); margin: 0 0 16px; }
 .setting-row {
   display: flex; align-items: center; justify-content: space-between;
   gap: 12px; margin: 12px 0;
@@ -385,34 +451,27 @@ body {
 .setting-row label { font-size: 17px; color: #33475b; }
 .setting-row select {
   flex: 1; max-width: 260px; padding: 9px 10px; font-size: 17px;
-  border: 1px solid #b9c6d0; border-radius: 10px; background: #fafcfe;
+  border: 1px solid #d9c79c; border-radius: 10px; background: #fafcfe;
 }
 .setting-row input {
   flex: 1; padding: 9px 10px; font-size: 16px;
-  border: 1px solid #b9c6d0; border-radius: 10px;
+  border: 1px solid #d9c79c; border-radius: 10px;
 }
-.primary-btn {
-  width: 100%; margin-top: 8px; padding: 13px 0; font-size: 19px;
-  background: #1f5b8b; color: #fff; border: none; border-radius: 12px; cursor: pointer;
-}
-.primary-btn:hover { background: #17486f; }
-.primary-btn.big { padding: 15px 0; font-size: 21px; }
-.mini-btn { padding: 6px 12px; font-size: 14px; border: 1px solid #b9c6d0; border-radius: 8px; background: #f2f6f9; cursor: pointer; }
-.mini-btn:hover { background: #e4edf4; }
 .danger-btn {
   padding: 8px 14px; font-size: 15px; cursor: pointer;
-  background: #fff; color: #c0392b; border: 1px solid #e0a9a2; border-radius: 9px;
+  background: var(--card); color: var(--cinnabar); border: 1px solid #e0a9a2; border-radius: 9px;
 }
 .danger-btn:hover { background: #fdf1f0; }
 
 /* ---- 棋谱管理 ---- */
 .records-head { display: flex; justify-content: space-between; align-items: center; max-width: 860px; margin: 0 auto 12px; }
-.records-head h2 { color: #1f5b8b; margin: 0; }
+.records-head h2 { color: var(--cinnabar); margin: 0; }
 #records-list { max-width: 860px; margin: 0 auto; }
 .record-row {
   display: flex; align-items: center; gap: 10px;
   padding: 10px 12px; margin: 8px 0; font-size: 16px;
-  background: #fff; border: 1px solid #e3eaf0; border-radius: 10px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: 0 2px 6px rgba(120,80,30,.1);
 }
 .rec-state { font-weight: 700; padding: 2px 10px; border-radius: 10px; font-size: 14px; }
 .rec-state.s-win  { background: #e8f5e9; color: #2e7d32; }
@@ -428,10 +487,10 @@ body {
 .model-row {
   display: flex; justify-content: space-between; align-items: center;
   padding: 10px 12px; margin: 6px 0; font-size: 16px;
-  background: #f7fafc; border: 1px solid #e3eaf0; border-radius: 9px; cursor: pointer;
+  background: #fdf8ec; border: 1px solid var(--line); border-radius: 10px; cursor: pointer;
 }
-.model-row:hover { background: #eef4f9; }
-.tag { background: #1f5b8b; color: #fff; font-size: 12px; padding: 2px 8px; border-radius: 8px; }
+.model-row:hover { background: #f9eecd; }
+.tag { background: var(--cinnabar); color: #fff; font-size: 12px; padding: 2px 8px; border-radius: 8px; }
 
 
 /* ---- 通用隐藏（修复：对局室在主界面误显示等一切 .hidden 场景）---- */
@@ -439,13 +498,14 @@ body {
 
 /* ---- 棋谱回放 ---- */
 .replay-board-box { width: min(440px, 86vw); margin: 0 auto; }
-.replay-info { text-align: center; font-size: 18px; font-weight: 700; margin: 10px 0 4px; color: #1f5b8b; }
+.replay-info { text-align: center; font-size: 18px; font-weight: 700; margin: 10px 0 4px; color: var(--cinnabar); }
 .replay-nav { display: flex; gap: 10px; justify-content: center; margin-top: 8px; }
 .replay-nav button {
   flex: 1; max-width: 132px; padding: 12px 0; font-size: 17px;
-  border: 1px solid #b9c6d0; border-radius: 10px; background: #f2f6f9; cursor: pointer;
+  border: 1px solid #d9c79c; border-radius: 10px; background: #faf3e2; cursor: pointer;
+  font-weight: 600; color: #5a3c16;
 }
-.replay-nav button:hover { background: #e4edf4; }
+.replay-nav button:hover { background: #f4e6c2; }
 .replay-nav button:disabled { opacity: .45; cursor: default; }
 .replay-events { margin-top: 10px; max-height: 120px; overflow-y: auto; font-size: 15px; color: #7a5230; }
 

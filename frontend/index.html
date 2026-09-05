@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>适老化数字人中国象棋棋友</title>
-  <link rel="stylesheet" href="css/style.css?v=4" />
+  <link rel="stylesheet" href="css/style.css?v=5" />
 </head>
 <body>
   <!-- 登录界面：创建账号 / 选择账号 -->
@@ -24,7 +24,7 @@
   <!-- 主界面 -->
   <div id="app-view" class="view hidden">
     <header class="topbar">
-      <h1>🀄 适老化数字人中国象棋棋友</h1>
+      <h1>🀄 <span class="brand-accent">适老化数字人</span>中国象棋棋友</h1>
       <div class="topbar-user">
         <span class="user-chip" id="user-label">用户</span>
         <button id="btn-logout" class="mini-btn">退出登录</button>
@@ -34,9 +34,9 @@
     <!-- 菜单区：登录后的主界面（Tab + 各 Tab 内容） -->
     <div id="menu-area">
       <nav class="tabs">
-        <button class="tab active" data-tab="start">开始对局</button>
-        <button class="tab" data-tab="records">棋谱管理</button>
-        <button class="tab" data-tab="settings">通用设置</button>
+        <button class="tab active" data-tab="start"><span class="tab-icon">♟️</span><span>开始对局</span></button>
+        <button class="tab" data-tab="records"><span class="tab-icon">📖</span><span>棋谱管理</span></button>
+        <button class="tab" data-tab="settings"><span class="tab-icon">🔧</span><span>通用设置</span></button>
       </nav>
 
       <!-- Tab：开始对局（只有对局设置 + 开始对局按钮，没有任何对局室内容） -->
