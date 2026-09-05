@@ -220,6 +220,7 @@
   // 开始对局页 = 只有「对局设置 + 开始对局」；对局室整页独立，点开始对局才出现
   function showSettingsForm() {
     if (avatarAdapter) avatarAdapter.stop(); // 退出对局：清空语音队列
+    stopVoice(); // 退出对局：停止麦克风监听
     el.gameLayout.classList.add("hidden");
     el.menuArea.classList.remove("hidden");
   }
@@ -285,6 +286,8 @@
         initAvatarAdapter(true, personality);
         connectDhWs(game.game_id);
       }
+      // 步骤4增强：开局后麦克风自动开启（无需手动点），自动判断是否说完一句
+      autoStartVoice();
     } catch (err) {
       setStatus("开局失败：" + err.message);
     } finally {
@@ -474,10 +477,13 @@
     } catch (e) { /* WS 不可用时静默 */ }
   }
 
-  // ---------------- 步骤4：语音/文字对话 ----------------
+  // ---------------- 步骤4：语音/文字对话（开局自动开启 + 自动判断说完一句）----------------
   let sr = null;        // SpeechRecognition 实例
   let srActive = false; // 是否在识别中
   let srFinal = "";     // 已确认的识别文本
+  let srLastActive = 0; // 最近一次识别到语音的时间戳（静默检测用）
+  let srSilenceTimer = null; // 静默检测定时器
+  let srAuto = false;   // 自动监听模式（开局后开启，onend 自动重启）
 
   function initVoice() {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -497,17 +503,22 @@
         if (ev.results[i].isFinal) final += t; else interim += t;
       }
       if (final) srFinal += final;
+      srLastActive = Date.now(); // 有语音活动，刷新静默计时
       const shown = (srFinal + interim).trim();
       if (el.voiceText) el.voiceText.textContent = shown;
       if (el.voiceStatus) el.voiceStatus.textContent = "正在听…";
+      // 有 final 结果时，立刻做一次"说完"判定（浏览器已确认一句）
+      if (final) scheduleSilenceCheck();
     };
     sr.onerror = function (ev) {
       if (ev.error === "not-allowed" || ev.error === "service-not-allowed") {
         srActive = false;
-        if (el.voiceStatus) el.voiceStatus.textContent = "麦克风权限被拒绝，请允许后重试";
+        srAuto = false;
+        stopSilenceCheck();
+        if (el.voiceStatus) el.voiceStatus.textContent = "麦克风权限被拒绝，请点麦克风重试";
         if (el.btnMic) el.btnMic.classList.remove("listening");
       } else if (ev.error === "no-speech") {
-        // 静音结束：若有文字则发送
+        // 静音：若已有文字则当作说完
         maybeSend();
       }
     };
@@ -515,13 +526,41 @@
       srActive = false;
       if (el.btnMic) el.btnMic.classList.remove("listening");
       maybeSend();
+      // 自动监听模式：识别结束后自动重启，保持一直能听到
+      if (srAuto && state.game && !state.gameOver) {
+        scheduleSilenceCheck();
+        try { sr.start(); srActive = true; if (el.btnMic) el.btnMic.classList.add("listening"); }
+        catch (e) { /* 重启失败，静默 */ }
+      } else {
+        stopSilenceCheck();
+      }
     };
   }
 
+  // 静默检测：识别到内容后，若 1.2s 内没有新的语音结果，判定为"说完一句话"
+  function scheduleSilenceCheck() {
+    stopSilenceCheck();
+    srSilenceTimer = setTimeout(function () {
+      const idle = Date.now() - srLastActive;
+      if (idle >= 1200 && srFinal.trim()) {
+        const text = srFinal.trim();
+        srFinal = "";
+        if (el.voiceText) el.voiceText.textContent = "";
+        sendUserSpeech(text);
+      }
+    }, 1300);
+  }
+  function stopSilenceCheck() {
+    if (srSilenceTimer) { clearTimeout(srSilenceTimer); srSilenceTimer = null; }
+  }
+
   function stopVoice() {
+    srAuto = false;
+    stopSilenceCheck();
     if (sr && srActive) { try { sr.stop(); } catch (e) { /* 忽略 */ } }
     srActive = false;
     if (el.btnMic) el.btnMic.classList.remove("listening");
+    if (el.voiceStatus) el.voiceStatus.textContent = "已停止听讲，点麦克风重新开启";
   }
 
   function maybeSend() {
@@ -555,19 +594,27 @@
           setDhState("speaking");
         }
       }
-      if (el.voiceStatus) el.voiceStatus.textContent = "点一下麦克风，跟棋友说句话";
+      if (el.voiceStatus) el.voiceStatus.textContent = "正在听…";
     } catch (err) {
       if (el.voiceStatus) el.voiceStatus.textContent = "发送失败：" + err.message;
     }
   }
 
-  // 事件绑定：支持点击切换 与 按住说话
+  // 自动开启监听（开局后调用）：无需手动点麦克风
+  function autoStartVoice() {
+    if (!sr) { initVoice(); if (!sr) return; }
+    srAuto = true;
+    srLastActive = Date.now();
+    if (!srActive) startListening();
+  }
+
+  // 事件绑定：点击切换 开/停
   function bindVoice() {
     if (!el.btnMic) return;
     el.btnMic.addEventListener("click", function (e) {
       e.preventDefault();
       if (srActive) { stopVoice(); }
-      else { startListening(); }
+      else { srAuto = true; startListening(); }
     });
   }
 
@@ -575,6 +622,7 @@
     if (!sr) { initVoice(); if (!sr) return; }
     if (!state.game) { if (el.voiceStatus) el.voiceStatus.textContent = "请先开始对局"; return; }
     srFinal = "";
+    srLastActive = Date.now();
     srActive = true;
     if (el.btnMic) el.btnMic.classList.add("listening");
     if (el.voiceStatus) el.voiceStatus.textContent = "正在听…";

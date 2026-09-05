@@ -123,27 +123,11 @@
       </div>
     </div>
 
-    <!-- 对局室：独立于菜单区。只有点击「开始对局」后才出现，整页都是对局室 -->
+    <!-- 对局室：独立于菜单区。只有点击「开始对局」后才出现，整页都是对局室
+         三列布局：左=数字人区，中=完整棋盘，右=操作键区 -->
     <section id="game-layout" class="layout hidden">
-      <section class="board-wrap">
-        <div id="board" class="board"></div>
-        <div class="board-side">
-          <div class="status" id="status">正在准备开局…</div>
-          <div class="winbar">
-            <span class="side-label red" id="winbar-red">红方(你)</span>
-            <div class="bar"><div id="win-fill"></div></div>
-            <span class="side-label black" id="winbar-black">黑方(AI)</span>
-          </div>
-          <div class="game-actions">
-            <button id="btn-undo">↩ 悔棋</button>
-            <button id="btn-draw">🤝 和棋</button>
-            <button id="btn-resign">🏳 认输</button>
-            <button id="btn-back-menu" class="primary-btn sm">返回主菜单</button>
-          </div>
-        </div>
-      </section>
-
-      <aside class="companion">
+      <!-- 左：数字人 -->
+      <aside class="companion companion-left">
         <div class="avatar-card">
           <div class="avatar" id="avatar">🧓</div>
           <div id="avatar-container" class="avatar-canvas hidden"></div>
@@ -159,7 +143,7 @@
         <!-- 步骤4：语音/文字对话 -->
         <div class="voice-panel">
           <div class="voice-bar">
-            <button id="btn-mic" class="mic-btn" title="按住说话，或点一下开始/停止">🎤</button>
+            <button id="btn-mic" class="mic-btn" title="点一下开始/停止说话">🎤</button>
             <div class="voice-info">
               <div id="voice-status" class="voice-status muted">点一下麦克风，跟棋友说句话</div>
               <div id="voice-text" class="voice-text muted"></div>
@@ -178,6 +162,32 @@
         <div class="panel-section">
           <h3>长期记忆</h3>
           <ul id="memories"><li class="muted">暂无</li></ul>
+        </div>
+      </aside>
+
+      <!-- 中：完整棋盘 -->
+      <section class="board-wrap">
+        <div id="board" class="board"></div>
+        <div class="board-side">
+          <div class="status" id="status">正在准备开局…</div>
+          <div class="winbar">
+            <span class="side-label red" id="winbar-red">红方(你)</span>
+            <div class="bar"><div id="win-fill"></div></div>
+            <span class="side-label black" id="winbar-black">黑方(AI)</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 右：操作键 -->
+      <aside class="ops-col">
+        <div class="panel-section">
+          <h3>对局操作</h3>
+          <div class="game-actions game-actions-col">
+            <button id="btn-undo" class="ops-btn">↩ 悔棋</button>
+            <button id="btn-draw" class="ops-btn">🤝 和棋</button>
+            <button id="btn-resign" class="ops-btn">🏳 认输</button>
+            <button id="btn-back-menu" class="primary-btn">返回主菜单</button>
+          </div>
         </div>
       </aside>
     </section>

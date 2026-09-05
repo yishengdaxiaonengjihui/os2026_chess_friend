@@ -69,7 +69,7 @@ body {
 }
 @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
 
-/* ---- 对局室：锁单屏无页面滚动条（棋盘随视口缩放，右栏内部滚动）---- */
+/* ---- 对局室：锁单屏无页面滚动条（三列：数字人 / 棋盘 / 操作键）---- */
 #game-layout {
   position: fixed;
   inset: 0;
@@ -77,9 +77,10 @@ body {
   margin: 0;
   max-width: 100%;
   width: 100%;
-  padding: 14px 22px;
-  grid-template-columns: minmax(0, 1fr) 380px;
-  gap: 18px;
+  padding: 14px 18px;
+  grid-template-columns: 300px minmax(0, 1fr) 300px;
+  gap: 16px;
+  align-items: stretch;
 }
 #game-layout .board-wrap {
   min-height: 0;
@@ -102,6 +103,45 @@ body {
 }
 #game-layout .companion::-webkit-scrollbar { width: 6px; }
 #game-layout .companion::-webkit-scrollbar-thumb { background: rgba(0,0,0,.18); border-radius: 3px; }
+
+/* 右列：操作键竖排 */
+#game-layout .ops-col {
+  height: calc(100vh - 28px);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+#game-layout .ops-col .panel-section { flex: 0 0 auto; }
+.ops-col .game-actions-col {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 4px;
+}
+.ops-col .ops-btn {
+  width: 100%;
+  padding: 14px 0;
+  font-size: 18px;
+  border: 2px solid #d9c79c;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #fffdf7 0%, #f5ebd2 100%);
+  cursor: pointer;
+  font-weight: 700; color: #5a3c16;
+  box-shadow: 0 2px 6px rgba(120,80,30,.12);
+  transition: background .12s ease, transform .12s ease, box-shadow .12s ease;
+}
+.ops-col .ops-btn:hover { background: linear-gradient(180deg, #fbe9b8 0%, #f2d890 100%); transform: translateY(-1px); box-shadow: 0 4px 10px rgba(120,80,30,.2); }
+.ops-col .ops-btn:active { transform: translateY(1px); }
+.ops-col .primary-btn { margin-top: 0; }
+
+@media (max-width: 1080px) {
+  #game-layout {
+    grid-template-columns: 250px minmax(0, 1fr) 250px;
+    gap: 12px;
+    padding: 10px 12px;
+  }
+}
 @media (max-width: 900px) {
   #game-layout {
     position: static;
@@ -111,6 +151,8 @@ body {
     grid-template-columns: 1fr;
   }
   #game-layout .companion { height: auto; overflow: visible; }
+  #game-layout .ops-col { height: auto; }
+  .ops-col .game-actions-col { flex-direction: row; flex-wrap: wrap; }
 }
 
 .board-wrap { display: flex; flex-direction: column; align-items: center; gap: 12px; }
