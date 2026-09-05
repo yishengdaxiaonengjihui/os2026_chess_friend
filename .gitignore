@@ -30,3 +30,9 @@ Thumbs.db
 .pt3root/
 .tmp_pytest/
 .tmp_pt2/
+
+# ---- 本地验证残留（CDP/Edge 临时资料与种子页） ----
+.pytest_cache/
+.tmp_edge*/
+_verify_seed*.html
+scripts/_cdp_verify*.js
