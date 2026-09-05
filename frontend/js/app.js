@@ -233,9 +233,9 @@
       state.targets = [];
       legalCache = {};
       state.board.clearSelection();
-      state.board.setFen(game.fen);
       updateWinbarLabels();
-      showGameRoom();
+      showGameRoom(); // 先显示对局室（棋盘获得真实尺寸）再渲染棋盘
+      state.board.setFen(game.fen);
       if (game.ai_opening && game.ai_opening.from_sq) {
         state.board.markAiMove(game.ai_opening.from_sq, game.ai_opening.to_sq);
         addEvent("AI(红) 先行：" + game.ai_opening.from_sq + "→" + game.ai_opening.to_sq);

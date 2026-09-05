@@ -135,6 +135,18 @@
     setFen(fen) {
       this.fen = fen;
       this._layout = this._computeLayout();
+      // 防御：容器不可见（display:none，如对局室尚未显示）时 getBoundingClientRect 为 0，
+      // 此刻渲染会画出 0 尺寸网格；延迟到下一帧，等容器显示后再渲染。
+      // 空 FEN（清屏）不需要重画网格，直接跳过排队避免隐藏状态下无限 rAF。
+      if ((!this._layout.w || !this._layout.h) && fen) {
+        if (this._pendingFen) return; // 已有待重画，避免重复排队
+        this._pendingFen = fen;
+        requestAnimationFrame(() => {
+          this._pendingFen = null;
+          if (this.fen) this.setFen(this.fen);
+        });
+        return;
+      }
       this.trailSvg.setAttribute("viewBox", "0 0 " + this._layout.w + " " + this._layout.h);
       this._drawGrid();
       const cells = parseFen(fen);
