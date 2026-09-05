@@ -44,6 +44,50 @@ body {
 }
 @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
 
+/* ---- 对局室：锁单屏无页面滚动条（棋盘随视口缩放，右栏内部滚动）---- */
+#game-layout {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  margin: 0;
+  max-width: 100%;
+  width: 100%;
+  padding: 14px 22px;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  gap: 18px;
+}
+#game-layout .board-wrap {
+  min-height: 0;
+  justify-content: flex-start;
+}
+#game-layout .board {
+  width: auto;
+  max-width: 100%;
+  height: min(calc(100vh - 172px), 756px);
+  aspect-ratio: 9 / 10;
+}
+#game-layout .board-side {
+  max-width: min(720px, 100%);
+}
+#game-layout .companion {
+  height: calc(100vh - 28px);
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+#game-layout .companion::-webkit-scrollbar { width: 6px; }
+#game-layout .companion::-webkit-scrollbar-thumb { background: rgba(0,0,0,.18); border-radius: 3px; }
+@media (max-width: 900px) {
+  #game-layout {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    grid-template-columns: 1fr;
+  }
+  #game-layout .companion { height: auto; overflow: visible; }
+}
+
 .board-wrap { display: flex; flex-direction: column; align-items: center; gap: 12px; }
 
 .board {
