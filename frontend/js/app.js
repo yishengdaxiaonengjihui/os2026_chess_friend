@@ -472,6 +472,18 @@
     }
   }
 
+  // 步骤2：AI 思考停顿时长 —— 按局面加权随机，制造真人感
+  function aiThinkDelay(resp) {
+    // 基础随机：0.8~1.8 秒
+    let delay = 800 + Math.random() * 1000;
+    const ev = (resp && resp.events ? resp.events : []).join(" ");
+    // 关键局面（吃子/将军/胜负）多"想"一会儿：+0.6~1.8 秒
+    if (/吃子|将军|将死|困毙/.test(ev)) {
+      delay += 600 + Math.random() * 1200;
+    }
+    return Math.round(delay);
+  }
+
   async function makeMove(file, rank) {
     if (state.gameOver) return;
     state.busy = true;
@@ -486,6 +498,10 @@
     setStatus("你已落子，老张想想怎么走…");
     try {
       const resp = await API.makeMove(state.game.game_id, state.game.user_id, fromSq, toSq);
+      // 步骤2：真人感思考停顿 —— 拿到 AI 应手后不立即落子，先"琢磨"一会儿
+      setDhState("thinking");
+      const thinkDelay = aiThinkDelay(resp);
+      await new Promise(function (r) { setTimeout(r, thinkDelay); });
       state.fen = resp.new_fen;
       state.board.setFen(resp.new_fen);
       if (resp.ai_move && resp.ai_move.from_sq) {
