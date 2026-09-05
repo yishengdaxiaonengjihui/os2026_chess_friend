@@ -51,6 +51,10 @@
     async setChatPref(userId, chatPref) {
       return request("/api/users/" + encodeURIComponent(userId) + "/chat-pref", jsonBody({ chat_pref: chatPref }, "PATCH"));
     },
+    // ---- 语音/文字对话（步骤4）----
+    async chat(gameId, userId, text) {
+      return request("/api/chat", jsonBody({ game_id: gameId, user_id: userId, text: text }));
+    },
     // ---- 棋谱管理 ----
     async starGame(gameId, starred) {
       return request("/api/games/" + gameId + "/star", jsonBody({ starred: starred }));

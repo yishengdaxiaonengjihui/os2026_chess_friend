@@ -57,6 +57,10 @@
     events: document.getElementById("events"),
     profile: document.getElementById("profile"),
     memories: document.getElementById("memories"),
+    // 步骤4：语音/文字对话
+    btnMic: document.getElementById("btn-mic"),
+    voiceStatus: document.getElementById("voice-status"),
+    voiceText: document.getElementById("voice-text"),
     // 棋谱管理
     btnRefreshRecords: document.getElementById("btn-refresh-records"),
     recordsList: document.getElementById("records-list"),
@@ -469,6 +473,117 @@
       dhWs.onclose = function () { dhWs = null; };
     } catch (e) { /* WS 不可用时静默 */ }
   }
+
+  // ---------------- 步骤4：语音/文字对话 ----------------
+  let sr = null;        // SpeechRecognition 实例
+  let srActive = false; // 是否在识别中
+  let srFinal = "";     // 已确认的识别文本
+
+  function initVoice() {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) {
+      if (el.btnMic) { el.btnMic.disabled = true; el.btnMic.title = "浏览器不支持语音识别"; }
+      if (el.voiceStatus) el.voiceStatus.textContent = "浏览器不支持语音识别";
+      return;
+    }
+    sr = new SR();
+    sr.lang = "zh-CN";
+    sr.continuous = true;
+    sr.interimResults = true;
+    sr.onresult = function (ev) {
+      let interim = "", final = "";
+      for (let i = ev.resultIndex; i < ev.results.length; i++) {
+        const t = ev.results[i][0].transcript;
+        if (ev.results[i].isFinal) final += t; else interim += t;
+      }
+      if (final) srFinal += final;
+      const shown = (srFinal + interim).trim();
+      if (el.voiceText) el.voiceText.textContent = shown;
+      if (el.voiceStatus) el.voiceStatus.textContent = "正在听…";
+    };
+    sr.onerror = function (ev) {
+      if (ev.error === "not-allowed" || ev.error === "service-not-allowed") {
+        srActive = false;
+        if (el.voiceStatus) el.voiceStatus.textContent = "麦克风权限被拒绝，请允许后重试";
+        if (el.btnMic) el.btnMic.classList.remove("listening");
+      } else if (ev.error === "no-speech") {
+        // 静音结束：若有文字则发送
+        maybeSend();
+      }
+    };
+    sr.onend = function () {
+      srActive = false;
+      if (el.btnMic) el.btnMic.classList.remove("listening");
+      maybeSend();
+    };
+  }
+
+  function stopVoice() {
+    if (sr && srActive) { try { sr.stop(); } catch (e) { /* 忽略 */ } }
+    srActive = false;
+    if (el.btnMic) el.btnMic.classList.remove("listening");
+  }
+
+  function maybeSend() {
+    const text = (srFinal || "").trim();
+    if (!text) return;
+    srFinal = "";
+    if (el.voiceText) el.voiceText.textContent = "";
+    sendUserSpeech(text);
+  }
+
+  // 发送用户说的话给棋友，并播报 AI 回复（bargeIn 高优先级）
+  async function sendUserSpeech(text) {
+    if (!state.game) { if (el.voiceStatus) el.voiceStatus.textContent = "请先开始对局"; return; }
+    if (el.voiceStatus) el.voiceStatus.textContent = "你说：" + text;
+    if (el.speech) el.speech.textContent = "（你说）" + text;
+    try {
+      const res = await API.chat(state.game.game_id, state.game.user_id, text);
+      if (res.status === "noise_ignored") {
+        if (el.voiceStatus) el.voiceStatus.textContent = "没听清，再说一遍？";
+        return;
+      }
+      const reply = res.reply;
+      if (reply) {
+        if (el.speech) el.speech.textContent = reply.speech_text;
+        if (el.emotionChip) el.emotionChip.textContent = "情绪 " + reply.emotion_tag;
+        if (el.actionChip) el.actionChip.textContent = "动作 " + reply.action_tag;
+        // 高优先级播报：打断当前数字人语音，优先回应玩家
+        if (avatarAdapter) {
+          avatarAdapter.bargeIn({ speech_text: reply.speech_text, emotion_tag: reply.emotion_tag });
+        } else {
+          setDhState("speaking");
+        }
+      }
+      if (el.voiceStatus) el.voiceStatus.textContent = "点一下麦克风，跟棋友说句话";
+    } catch (err) {
+      if (el.voiceStatus) el.voiceStatus.textContent = "发送失败：" + err.message;
+    }
+  }
+
+  // 事件绑定：支持点击切换 与 按住说话
+  function bindVoice() {
+    if (!el.btnMic) return;
+    el.btnMic.addEventListener("click", function (e) {
+      e.preventDefault();
+      if (srActive) { stopVoice(); }
+      else { startListening(); }
+    });
+  }
+
+  function startListening() {
+    if (!sr) { initVoice(); if (!sr) return; }
+    if (!state.game) { if (el.voiceStatus) el.voiceStatus.textContent = "请先开始对局"; return; }
+    srFinal = "";
+    srActive = true;
+    if (el.btnMic) el.btnMic.classList.add("listening");
+    if (el.voiceStatus) el.voiceStatus.textContent = "正在听…";
+    try { sr.start(); } catch (e) { srActive = false; if (el.btnMic) el.btnMic.classList.remove("listening"); }
+  }
+
+  // 初始化语音（页面加载时探测支持性，进入对局即可用）
+  initVoice();
+  bindVoice();
 
   // ---------------- 选子 / 落子 ----------------
   async function selectPiece(file, rank) {

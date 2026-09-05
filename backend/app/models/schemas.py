@@ -88,6 +88,12 @@ class InterruptRequest(BaseModel):
     transcript: str
 
 
+class ChatRequest(BaseModel):
+    game_id: str
+    user_id: str
+    text: str  # 用户说话转写的文字
+
+
 class PersonalityRequest(BaseModel):
     personality: str = Field(..., description="人格：laozhang / xiaoya")
 

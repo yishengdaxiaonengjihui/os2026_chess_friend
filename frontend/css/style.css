@@ -165,6 +165,35 @@ body {
   box-shadow: 0 2px 8px rgba(0,0,0,.12);
 }
 
+/* ---- 步骤4：语音/文字对话 ---- */
+.voice-panel { background: #fff; border-radius: 12px; padding: 10px 12px; box-shadow: 0 1px 5px rgba(0,0,0,.1); }
+.voice-bar { display: flex; align-items: center; gap: 12px; }
+.mic-btn {
+  width: 64px; height: 64px; border-radius: 50%;
+  border: none; background: linear-gradient(145deg, #e8b04b, #c98a2d);
+  font-size: 30px; cursor: pointer; flex-shrink: 0;
+  box-shadow: 0 3px 8px rgba(0,0,0,.25), inset 0 -3px 6px rgba(0,0,0,.15);
+  transition: transform .12s ease, box-shadow .12s ease;
+}
+.mic-btn:hover { transform: scale(1.05); }
+.mic-btn:active { transform: scale(.95); }
+.mic-btn:disabled { opacity: .4; cursor: not-allowed; }
+.mic-btn.listening {
+  background: linear-gradient(145deg, #e74c3c, #c0392b);
+  animation: mic-pulse 1s ease infinite;
+}
+@keyframes mic-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(231,76,60,.5); }
+  50% { box-shadow: 0 0 0 12px rgba(231,76,60,0); }
+}
+.voice-info { flex: 1; min-width: 0; }
+.voice-status { font-size: 15px; }
+.voice-text {
+  font-size: 17px; line-height: 1.4; margin-top: 4px;
+  background: #f4f1e7; border-radius: 8px; padding: 6px 10px;
+  min-height: 22px; word-break: break-all;
+}
+
 .panel-section { background: #fff; border-radius: 12px; padding: 12px 14px; box-shadow: 0 1px 5px rgba(0,0,0,.1); }
 .panel-section h3 { font-size: 15px; color: #8a6d3b; margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 6px; }
 .panel-section ul { list-style: none; }

@@ -63,6 +63,7 @@ from ..db.database import (
     set_game_starred,
 )
 from ..models.schemas import (
+    ChatRequest,
     GamesListResponse,
     InterruptRequest,
     LLMOutput,
@@ -629,6 +630,75 @@ def interrupt(req: InterruptRequest) -> dict:
     if personal:
         sess["memory"].long_term.add(personal, metadata={"type": "personal", "game_id": sess["game_id"]})
     return {"status": "interrupted", "queue_cleared": True}
+
+
+@router.post("/api/chat")
+def chat(req: ChatRequest) -> dict:
+    """语音/文字对话：用户说话 -> AI 用当前棋友人格回一句口语（步骤4）。
+
+    复用问题3 输入过滤（噪音忽略 / 连续消息去抖）+ 分层记忆 + LLM：
+    - 用户消息入短期记忆
+    - 构建五层 Prompt（棋局上下文保持当前局面）生成一句回复
+    - 返回 {speech_text, emotion_tag, action_tag, status}，前端 bargeIn 播报
+    """
+    sess = _sessions.get(req.game_id)
+    if not sess:
+        raise HTTPException(status_code=404, detail="game_id 不存在")
+    # 问题3：噪音判定
+    if is_noise(req.text):
+        return {"status": "noise_ignored", "reason": "noise", "reply": None}
+    # 问题3：连续消息去抖（仅最新生效）
+    gate = sess.setdefault("input_filter", InputFilter())
+    verdict = gate.check(req.text)
+    if verdict == "dedup":
+        sess["memory"].short_term.replace_last_user(f"（用户说话）{req.text}")
+    else:
+        sess["memory"].remember_turn("user", f"（用户说话）{req.text}")
+    # 问题9：主动透露个人信息时写入长期记忆
+    personal = detect_personal_info(req.text)
+    if personal:
+        sess["memory"].long_term.add(personal, metadata={"type": "personal", "game_id": sess["game_id"]})
+
+    # 分层记忆召回 + 画像
+    recall = sess["memory"].recall(query=req.text)
+    profile = sess["memory"].profile_store.get(sess["user_id"])
+    # 对话上下文：保持当前棋局局面，让 AI 回复贴合"边下棋边聊"
+    ctx = {
+        "user_move": None,
+        "ai_move": None,
+        "material_text": "当前棋局进行中",
+        "events": ["对方正在和你聊天"],
+    }
+    try:
+        messages = build_prompt(
+            profile=profile,
+            long_term_memories=recall["long_term"],
+            board_context=ctx,
+            short_term_history=recall["short_term"],
+            system_role=system_role_for(sess["personality"]),
+            chat_pref=sess.get("chat_pref"),
+        )
+        llm_out = _llm.chat(messages)
+        llm_out["speech_text"] = sanitize_speech(llm_out["speech_text"])
+        sess["memory"].remember_turn("assistant", llm_out["speech_text"])
+        sess["last_speech_ts"] = time.time()
+        sess["silent_streak"] = 0
+        return {
+            "status": "ok",
+            "reply": {
+                "speech_text": llm_out["speech_text"],
+                "emotion_tag": llm_out["emotion_tag"],
+                "action_tag": llm_out["action_tag"],
+            },
+        }
+    except Exception as e:  # noqa: BLE001 LLM 失败时降级为口语库兜底
+        logger.warning("chat LLM 失败，口语库兜底: %s", e)
+        from ..core.prompt_builder import system_role_for as _sf  # noqa: F401 避免循环导入风险
+        _ = _sf
+        return {
+            "status": "fallback",
+            "reply": {"speech_text": "嗯，你说的我听着呢，咱先把这盘下好。", "emotion_tag": "平静", "action_tag": "nod"},
+        }
 
 
 # ---------------- 多用户：账号 ----------------
