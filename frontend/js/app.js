@@ -92,6 +92,28 @@
 
   let legalCache = {}; // key: fen|color -> moves[]
 
+  // 步骤3：用户长考提醒 —— 轮到用户后 N 秒没落子，AI 主动搭话一次
+  const LONG_THINK_MS = 12000;
+  let longThinkTimer = null;
+  let longThinkFired = false;
+  function startLongThinkTimer() {
+    clearLongThinkTimer();
+    longThinkFired = false;
+    longThinkTimer = setTimeout(function () {
+      longThinkFired = true;
+      if (!state.game || state.gameOver || state.busy) return;
+      if (!window.Chatter) return;
+      const line = Chatter.thinkLong(currentPersonality());
+      if (line) {
+        el.speech.textContent = line;
+        if (avatarAdapter) avatarAdapter.speak({ speech_text: line, emotion_tag: "平静" });
+      }
+    }, LONG_THINK_MS);
+  }
+  function clearLongThinkTimer() {
+    if (longThinkTimer) { clearTimeout(longThinkTimer); longThinkTimer = null; }
+  }
+
   // ---------------- 账号 / 会话 ----------------
   function currentUser() {
     try { return JSON.parse(localStorage.getItem("cf_user") || "null"); }
@@ -99,6 +121,10 @@
   }
   function saveUser(u) { localStorage.setItem("cf_user", JSON.stringify(u)); }
   function userId() { const u = currentUser(); return u ? u.user_id : ""; }
+  function currentPersonality() {
+    // 步骤3：口语库需要知道当前棋友人格；从开始对局页下拉读取
+    return el.setPersonality ? el.setPersonality.value : "laozhang";
+  }
 
   // ---------------- 视图 / Tab ----------------
   function showView(name) {
@@ -181,6 +207,7 @@
     state.selected = null;
     state.targets = [];
     legalCache = {};
+    clearLongThinkTimer();
     state.board.setFen("");
     showSettingsForm();
   }
@@ -488,6 +515,7 @@
     if (state.gameOver) return;
     state.busy = true;
     state.board.setBusy(true);
+    clearLongThinkTimer(); // 用户已落子，取消长考提醒
     // 问题2：落子属游戏操作，不粗暴打断正在播放的语音；新评论进入适配器队列排队
     const fromSq = fileToSq(state.selected.file, state.selected.rank);
     const toSq = fileToSq(file, rank);
@@ -500,6 +528,14 @@
       const resp = await API.makeMove(state.game.game_id, state.game.user_id, fromSq, toSq);
       // 步骤2：真人感思考停顿 —— 拿到 AI 应手后不立即落子，先"琢磨"一会儿
       setDhState("thinking");
+      // 步骤3：思考嘟囔 —— 停顿期播一句口头禅，像真人在想棋
+      if (window.Chatter) {
+        const mumble = Chatter.thinking(currentPersonality());
+        if (mumble) {
+          el.speech.textContent = mumble;
+          if (avatarAdapter) avatarAdapter.speak({ speech_text: mumble, emotion_tag: "沉思" });
+        }
+      }
       const thinkDelay = aiThinkDelay(resp);
       await new Promise(function (r) { setTimeout(r, thinkDelay); });
       state.fen = resp.new_fen;
@@ -513,13 +549,27 @@
       for (const e of resp.events) addEvent(e);
 
       const llm = resp.llm_output;
+      const pers = currentPersonality();
       if (llm) {
-        el.speech.textContent = llm.speech_text;
+        // 步骤3：口语化补丁 —— 在 LLM 台词前按局面补一句口头禅，去机械感
+        let speechText = llm.speech_text;
+        if (window.Chatter) {
+          const banter = Chatter.afterMove(pers, resp);
+          if (banter.line && !speechText.startsWith(banter.line)) {
+            speechText = banter.line + speechText;
+          }
+        }
+        el.speech.textContent = speechText;
         el.emotionChip.textContent = "情绪 " + llm.emotion_tag;
         el.actionChip.textContent = "动作 " + llm.action_tag;
       } else {
-        // 问题1：言语触发决策后 AI 静默思索，只播思考动画
-        el.speech.textContent = "…";
+        // 问题1：言语触发决策后 AI 静默思索；步骤3：用口语库短句补一句人性化台词
+        let quietLine = "…";
+        if (window.Chatter) {
+          const banter = Chatter.afterMove(pers, resp);
+          if (banter.line) quietLine = banter.line;
+        }
+        el.speech.textContent = quietLine;
         el.emotionChip.textContent = "情绪 平静";
         el.actionChip.textContent = "动作 思考";
       }
@@ -542,15 +592,18 @@
       const hasStale = resp.events.some(function (e) { return e.indexOf("困毙") >= 0; });
       if (hasMate) {
         state.gameOver = true;
+        clearLongThinkTimer();
         const userWon = resp.events.some(function (e) { return e.indexOf("玩家获胜") >= 0; });
         setStatus(userWon ? "对局结束：你将死 AI，赢了！点击「开始对局」再来一盘" : "对局结束：你被将死了，AI 获胜。点击「开始对局」再来一盘");
         renderRecords();
       } else if (hasStale) {
         state.gameOver = true;
+        clearLongThinkTimer();
         setStatus("对局结束：困毙，和棋。点击「开始对局」再来一盘");
         renderRecords();
       } else {
         setStatus(yourTurnText());
+        startLongThinkTimer(); // 步骤3：轮到用户，启动长考提醒
       }
     } catch (err) {
       setStatus("落子失败：" + err.message);

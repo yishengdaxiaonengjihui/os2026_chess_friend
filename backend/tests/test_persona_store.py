@@ -39,3 +39,17 @@ def test_personas_json_is_editable():
     assert "laozhang" in data["personas"]
     assert "synopsis" in data["personas"]["laozhang"]
     assert "story" in data["personas"]["laozhang"]
+
+
+def test_persona_synopsis_has_speech_style():
+    """步骤3：人格梗概含说话风格（口癖/禁书面模板），注入系统角色。"""
+    lao = system_role_for("laozhang")
+    xia = system_role_for("xiaoya")
+    # 口癖描述
+    assert "口头禅" in lao or "说话风格" in lao
+    assert "说话风格" in xia
+    # 禁书面模板
+    assert "大爷您" in lao and "大爷您" in xia
+    # 硬性要求第 8 条去机械化
+    assert "去机械化" in lao
+    assert "机器腔" in xia
