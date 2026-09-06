@@ -460,6 +460,9 @@
           if (fb) fb.style.display = "none";
           el.avatarContainer.classList.remove("hidden");
         };
+        // 回声防护：数字人发声时暂停麦克风识别，播完恢复，避免 TTS 被收进去再当输入
+        avatarAdapter.onSpeechStart = function () { voiceMute(); };
+        avatarAdapter.onSpeechEnd = function () { voiceUnmute(); };
         avatarAdapter.init();
       })
       .catch(function () { setDhState("off"); });
@@ -529,7 +532,8 @@
       if (el.btnMic) el.btnMic.classList.remove("listening");
       maybeSend();
       // 自动监听模式：识别结束后自动重启，保持一直能听到
-      if (srAuto && state.game && !state.gameOver) {
+      // （回声防护：数字人发声期间的停止(srMuted)不重启，播完由 voiceUnmute 恢复）
+      if (srAuto && !srMuted && state.game && !state.gameOver) {
         scheduleSilenceCheck();
         try { sr.start(); srActive = true; if (el.btnMic) el.btnMic.classList.add("listening"); }
         catch (e) { /* 重启失败，静默 */ }
@@ -548,6 +552,8 @@
         const text = srFinal.trim();
         srFinal = "";
         if (el.voiceText) el.voiceText.textContent = "";
+        // 回声防护：数字人台词被误收则丢弃
+        if (isEchoText(text)) return;
         sendUserSpeech(text);
       }
     }, 1300);
@@ -565,11 +571,45 @@
     if (el.voiceStatus) el.voiceStatus.textContent = "已停止听讲，点麦克风重新开启";
   }
 
+  // ---- 回声防护：数字人发声期间暂停麦克风识别，播完恢复 ----
+  let srMuted = false; // 是否被数字人播放静音（非用户主动停止）
+  function voiceMute() {
+    srMuted = true;
+    stopSilenceCheck();
+    srFinal = ""; // 丢弃静音瞬间可能残留的半句识别，防止误发
+    if (el.voiceText) el.voiceText.textContent = "";
+    if (sr && srActive) { try { sr.stop(); } catch (e) { /* 忽略 */ } }
+    srActive = false;
+    if (el.btnMic) el.btnMic.classList.remove("listening");
+  }
+  function voiceUnmute() {
+    srMuted = false;
+    // 自动监听模式下恢复识别（仍在对局、未被用户手动关闭时）
+    if (srAuto && state.game && !state.gameOver && sr) {
+      srLastActive = Date.now();
+      if (!srActive) startListening();
+    }
+  }
+
+  // 回声过滤：识别文本若等于 AI 刚说的台词（TTS 被麦克风误收的残响），丢弃
+  function isEchoText(text) {
+    if (!avatarAdapter || !avatarAdapter.lastSpeechText) return false;
+    const ai = (avatarAdapter.lastSpeechText || "").trim();
+    if (!ai || !text) return false;
+    // 完全一致，或 AI 台词被识别成其子串/加句号等变体
+    return text === ai || ai.indexOf(text) >= 0 || text.indexOf(ai) >= 0;
+  }
+
   function maybeSend() {
     const text = (srFinal || "").trim();
     if (!text) return;
     srFinal = "";
     if (el.voiceText) el.voiceText.textContent = "";
+    // 回声防护：数字人刚才说的话被麦克风误收 -> 丢弃，不当作输入
+    if (isEchoText(text)) {
+      if (el.voiceStatus) el.voiceStatus.textContent = "正在听…";
+      return;
+    }
     sendUserSpeech(text);
   }
 
@@ -623,6 +663,11 @@
   function startListening() {
     if (!sr) { initVoice(); if (!sr) return; }
     if (!state.game) { if (el.voiceStatus) el.voiceStatus.textContent = "请先开始对局"; return; }
+    // 回声防护：数字人正在发声时不让麦克风启动，避免 TTS 被收进去
+    if (srMuted) {
+      if (el.voiceStatus) el.voiceStatus.textContent = "棋友正在说话，稍等一下…";
+      return;
+    }
     srFinal = "";
     srLastActive = Date.now();
     srActive = true;

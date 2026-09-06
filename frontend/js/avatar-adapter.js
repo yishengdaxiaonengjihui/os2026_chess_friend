@@ -58,6 +58,11 @@
     this.avatar = null;
     this.mode = "none"; // "xmov" | "speech" | "none"
     this.onState = null;
+    // 回声防护：数字人发声开始/结束回调（前端用于暂停/恢复麦克风识别）
+    this.onSpeechStart = null;
+    this.onSpeechEnd = null;
+    // 最近一句 AI 台词（供回声文本过滤兜底）
+    this.lastSpeechText = "";
     // 问题2：调度器状态
     this._queue = [];          // 待播语音任务（低优先级，max 2）
     this._playing = false;
@@ -134,20 +139,31 @@
     this._queue = [];
     this._playing = false;
     this.setState("idle");
+    this._notifySpeechEnd();
   };
 
   AvatarAdapter.prototype._playNext = function () {
     var self = this;
     if (this._playing) { return; }
     var cmd = this._queue.shift();
-    if (!cmd) { this.setState("idle"); return; }
+    if (!cmd) { this.setState("idle"); this._notifySpeechEnd(); return; }
     this._playing = true;
+    this.lastSpeechText = cmd.speech_text || "";
     this.setState("speaking");
+    this._notifySpeechStart();
     this._touchEmotion(cmd.emotion_tag || cmd.emotion_sdk || "平静");
     this._doSpeak(cmd, function () {
       self._playing = false;
       self._playNext();
     });
+  };
+
+  /* 回声防护：播放开始/结束通知（供前端暂停/恢复麦克风识别） */
+  AvatarAdapter.prototype._notifySpeechStart = function () {
+    if (this.onSpeechStart) { try { this.onSpeechStart(); } catch (e) { /* 忽略 */ } }
+  };
+  AvatarAdapter.prototype._notifySpeechEnd = function () {
+    if (this.onSpeechEnd) { try { this.onSpeechEnd(); } catch (e) { /* 忽略 */ } }
   };
 
   /* 实际播放（按模式），播完调用 done() 继续队列。 */
