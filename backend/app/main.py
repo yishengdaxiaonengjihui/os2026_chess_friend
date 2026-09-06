@@ -12,6 +12,7 @@ import asyncio
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from .api.routes import router
@@ -21,6 +22,19 @@ from .db.database import init_db
 
 SETTINGS = get_settings()
 FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend"
+
+
+class NoCacheStaticFiles(StaticFiles):
+    """静态文件禁用缓存：前端改动后用户刷新即可拿到最新 JS/CSS，
+    避免浏览器缓存旧版导致修复不生效。"""
+
+    def file_response(
+        self, full_path, stat_result, scope, status_code=200
+    ) -> FileResponse:
+        resp = super().file_response(full_path, stat_result, scope, status_code)
+        resp.headers["Cache-Control"] = "no-store, must-revalidate"
+        resp.headers["Pragma"] = "no-cache"
+        return resp
 
 
 @asynccontextmanager
@@ -105,6 +119,10 @@ async def ws_game(ws: WebSocket, game_id: str):
         ws_hub.unregister(game_id, ws)
 
 
-# 静态前端（最后挂载，/api /health 等路由优先）
+# 静态前端（最后挂载，/api /health 等路由优先）；禁用缓存保证前端修复即时生效
 if FRONTEND_DIR.exists():
-    app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")
+    app.mount(
+        "/",
+        NoCacheStaticFiles(directory=str(FRONTEND_DIR), html=True),
+        name="frontend",
+    )
