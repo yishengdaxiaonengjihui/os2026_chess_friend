@@ -463,6 +463,12 @@
         // 回声防护：数字人发声时暂停麦克风识别，播完恢复，避免 TTS 被收进去再当输入
         avatarAdapter.onSpeechStart = function () { voiceMute(); };
         avatarAdapter.onSpeechEnd = function () { voiceUnmute(); };
+        // 每句播完把 AI 台词记入字幕历史（时间戳=播放结束时刻，贴近回声发生期），
+        // 供"相邻行相似度 + 时间窗"回声检测比对
+        avatarAdapter.onSpeechDone = function (text) {
+          lastAiTs = Date.now(); // 记录播放完成时刻（isEchoText 时间窗）
+          recordSubtitle(text, "ai");
+        };
         avatarAdapter.init();
       })
       .catch(function () { setDhState("off"); });
@@ -552,8 +558,9 @@
         const text = srFinal.trim();
         srFinal = "";
         if (el.voiceText) el.voiceText.textContent = "";
-        // 回声防护：数字人台词被误收则丢弃
-        if (isEchoText(text)) return;
+        // 回声防护：数字人台词（或其回声变体）被误收则丢弃
+        if (isEcho(text)) return;
+        recordSubtitle(text, "user");
         sendUserSpeech(text);
       }
     }, 1300);
@@ -591,25 +598,106 @@
     }
   }
 
-  // 回声过滤：识别文本若等于 AI 刚说的台词（TTS 被麦克风误收的残响），丢弃
+  // ---- 回声过滤（用户方案：字幕历史 + 相邻行相似度 + 时间窗）----
+  // 字幕历史：AI 台词 + 已确认用户发言（带时间戳），用于判断新识别行是否回声
+  let subtitleHistory = [];
+  let lastAiTs = 0; // 最近一句 AI 台词播放完成的时刻（isEchoText 时间窗用）
+  const ECHO_SIM_THRESHOLD = 0.85;  // 相似度阈值（用户建议 0.85-0.92）
+  const ECHO_TIME_WINDOW = 2200;    // 时间窗 < 2.2s
+  const SUBTITLE_MAX = 16;
+
+  function recordSubtitle(text, src) {
+    if (!text) return;
+    subtitleHistory.push({ text: text, ts: Date.now(), src: src || "user" });
+    if (subtitleHistory.length > SUBTITLE_MAX) subtitleHistory.shift();
+  }
+
+  // 编辑距离（Levenshtein）
+  function editDistance(a, b) {
+    const m = a.length, n = b.length;
+    if (!m) return n; if (!n) return m;
+    const dp = new Uint32Array(n + 1);
+    for (let j = 0; j <= n; j++) dp[j] = j;
+    for (let i = 1; i <= m; i++) {
+      let prev = dp[0];
+      dp[0] = i;
+      for (let j = 1; j <= n; j++) {
+        const tmp = dp[j];
+        const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+        dp[j] = Math.min(dp[j] + 1, dp[j - 1] + 1, prev + cost);
+        prev = tmp;
+      }
+    }
+    return dp[n];
+  }
+
+  // 字符集合 Jaccard（对中文口语识别变体更鲁棒）
+  function jaccardSim(a, b) {
+    const sa = new Set(a), sb = new Set(b);
+    if (!sa.size && !sb.size) return 1;
+    let inter = 0;
+    for (const ch of sa) { if (sb.has(ch)) inter++; }
+    return inter / (sa.size + sb.size - inter);
+  }
+
+  // 两行文本相似度：编辑距离相似度 与 Jaccard 取较高者
+  function textSimilarity(a, b) {
+    if (!a || !b) return 0;
+    if (a === b) return 1;
+    const maxLen = Math.max(a.length, b.length);
+    const editSim = maxLen ? 1 - editDistance(a, b) / maxLen : 1;
+    return Math.max(editSim, jaccardSim(a, b));
+  }
+
+  // 回声判定：与时间窗内(<=2.2s)的历史行相似度>=阈值 -> 回声
+  function isEchoByHistory(text, now) {
+    if (!text) return false;
+    const t = now || Date.now();
+    for (let i = subtitleHistory.length - 1; i >= 0; i--) {
+      const h = subtitleHistory[i];
+      if (t - h.ts > ECHO_TIME_WINDOW) break; // 历史按时间有序，超出窗口忽略
+      if (textSimilarity(text, h.text) >= ECHO_SIM_THRESHOLD) return true;
+    }
+    return false;
+  }
+
+  // 快速路径：识别文本与 AI 刚说的台词精确/子串一致（仅限 AI 播完后的时间窗内，
+  // 避免超窗后用户说相同内容被误判——时间间隔是回声判定的硬条件）
   function isEchoText(text) {
     if (!avatarAdapter || !avatarAdapter.lastSpeechText) return false;
+    if (Date.now() - lastAiTs > ECHO_TIME_WINDOW) return false; // 超窗不判回声
     const ai = (avatarAdapter.lastSpeechText || "").trim();
     if (!ai || !text) return false;
-    // 完全一致，或 AI 台词被识别成其子串/加句号等变体
     return text === ai || ai.indexOf(text) >= 0 || text.indexOf(ai) >= 0;
   }
+
+  // 统一回声判定：任一命中即回声
+  function isEcho(text) {
+    return isEchoText(text) || isEchoByHistory(text);
+  }
+
+  // 调试/验证口：回声过滤算法单测（CDP 与真实排障用）
+  window.__echoDebug = {
+    sim: function (a, b) { return textSimilarity(a, b); },
+    isEcho: function (t) { return isEcho(t); },
+    record: function (t, s) { recordSubtitle(t, s); },
+    history: function () { return subtitleHistory.slice(); },
+    clear: function () { subtitleHistory = []; },
+    threshold: ECHO_SIM_THRESHOLD,
+    window: ECHO_TIME_WINDOW,
+  };
 
   function maybeSend() {
     const text = (srFinal || "").trim();
     if (!text) return;
     srFinal = "";
     if (el.voiceText) el.voiceText.textContent = "";
-    // 回声防护：数字人刚才说的话被麦克风误收 -> 丢弃，不当作输入
-    if (isEchoText(text)) {
+    // 回声防护：数字人刚才说的话（或其回声变体）被麦克风误收 -> 丢弃
+    if (isEcho(text)) {
       if (el.voiceStatus) el.voiceStatus.textContent = "正在听…";
       return;
     }
+    recordSubtitle(text, "user");
     sendUserSpeech(text);
   }
 

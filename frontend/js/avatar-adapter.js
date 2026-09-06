@@ -61,6 +61,9 @@
     // 回声防护：数字人发声开始/结束回调（前端用于暂停/恢复麦克风识别）
     this.onSpeechStart = null;
     this.onSpeechEnd = null;
+    // 回声防护：每句台词播放完成回调（前端按播放结束时刻记入字幕历史，
+    // 供"相邻行相似度+时间窗"回声检测比对——回声发生在播放结束后的余音期）
+    this.onSpeechDone = null;
     // 最近一句 AI 台词（供回声文本过滤兜底）
     this.lastSpeechText = "";
     // 问题2：调度器状态
@@ -153,6 +156,7 @@
     this._notifySpeechStart();
     this._touchEmotion(cmd.emotion_tag || cmd.emotion_sdk || "平静");
     this._doSpeak(cmd, function () {
+      self._notifySpeechDone(cmd.speech_text || ""); // 本句播完（时间戳=结束时刻）
       self._playing = false;
       self._playNext();
     });
@@ -164,6 +168,10 @@
   };
   AvatarAdapter.prototype._notifySpeechEnd = function () {
     if (this.onSpeechEnd) { try { this.onSpeechEnd(); } catch (e) { /* 忽略 */ } }
+  };
+  /* 回声防护：单句播完通知（供前端把 AI 台词记入字幕历史，时间贴近回声时刻） */
+  AvatarAdapter.prototype._notifySpeechDone = function (text) {
+    if (this.onSpeechDone) { try { this.onSpeechDone(text); } catch (e) { /* 忽略 */ } }
   };
 
   /* 实际播放（按模式），播完调用 done() 继续队列。 */
