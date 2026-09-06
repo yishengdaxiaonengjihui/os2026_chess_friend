@@ -581,7 +581,7 @@
   // ---- 回声防护：数字人发声期间彻底关闭麦克风，播完(留余量)恢复 ----
   let srMuted = false; // 是否被数字人播放静音（非用户主动停止）
   let srUnmuteTimer = null; // 恢复识别延时（等 TTS 尾音/混响过去）
-  const SR_UNMUTE_DELAY = 600; // 播完后再等 0.6s 恢复，杜绝尾音回声
+  const SR_UNMUTE_DELAY = 1000; // 播完后再等 1s 恢复，杜绝尾音/混响回声
   function voiceMute() {
     srMuted = true;
     stopSilenceCheck();
@@ -599,6 +599,11 @@
     if (srUnmuteTimer) { clearTimeout(srUnmuteTimer); srUnmuteTimer = null; }
     srUnmuteTimer = setTimeout(function () {
       srUnmuteTimer = null;
+      // 兜底：若数字人此刻仍在发声状态(估算不足/语速极慢)，继续关闭再等
+      if (avatarAdapter && avatarAdapter._playing) {
+        voiceUnmute();
+        return;
+      }
       if (srAuto && state.game && !state.gameOver && sr) {
         srLastActive = Date.now();
         if (!srActive) startListening();
