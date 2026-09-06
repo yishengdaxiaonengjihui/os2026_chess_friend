@@ -22,7 +22,7 @@
   </div>
 
   <!-- 主界面 -->
-  <div id="app-view" class="view hidden">
+  <div id="app-view" class="view hidden app-shell">
     <header class="topbar">
       <h1>🀄 <span class="brand-accent">适老化数字人</span>中国象棋棋友</h1>
       <div class="topbar-user">
@@ -31,6 +31,7 @@
       </div>
     </header>
 
+    <main class="app-main">
     <!-- 菜单区：登录后的主界面（Tab + 各 Tab 内容） -->
     <div id="menu-area">
       <nav class="tabs">
@@ -119,20 +120,36 @@
             <h3>模型管理</h3>
             <div id="model-list" class="muted">加载中…</div>
           </div>
+          <!-- 对局数据（从对局室移入设置，对局中实时更新，切到设置可查看） -->
+          <div class="panel-section">
+            <h3>本局事件</h3>
+            <ul id="events"><li class="muted">暂无</li></ul>
+          </div>
+          <div class="panel-section">
+            <h3>棋友画像（下棋行为统计，非医疗诊断）</h3>
+            <div id="profile" class="muted">开局后逐步生成…</div>
+          </div>
+          <div class="panel-section">
+            <h3>长期记忆</h3>
+            <ul id="memories"><li class="muted">暂无</li></ul>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- 对局室：独立于菜单区。只有点击「开始对局」后才出现，整页都是对局室
-         三列布局：左=数字人区，中=完整棋盘，右=操作键区 -->
+    <!-- 对局室：独立于菜单区。只有点击「开始对局」后才出现
+         三列布局：左=数字人（横屏窗口），中=完整棋盘，右=操作键 -->
     <section id="game-layout" class="layout hidden">
       <!-- 左：数字人 -->
       <aside class="companion companion-left">
-        <div class="avatar-card">
-          <div class="avatar" id="avatar">🧓</div>
+        <!-- 横屏数字人窗口（用户创建数字人即为横屏，保持比例适配） -->
+        <div class="dh-stage">
           <div id="avatar-container" class="avatar-canvas hidden"></div>
-          <div class="avatar-name" id="avatar-name">老张</div>
-          <div class="avatar-meta">
+          <div class="avatar-fallback" id="avatar-fallback">
+            <div class="avatar" id="avatar">🧓</div>
+            <div class="avatar-name" id="avatar-name">老张</div>
+          </div>
+          <div class="dh-stage-meta">
             <span class="chip" id="emotion-chip">情绪 --</span>
             <span class="chip" id="action-chip">动作 --</span>
             <span class="chip dh-chip" id="dh-chip">🤖 数字人：就绪</span>
@@ -149,19 +166,6 @@
               <div id="voice-text" class="voice-text muted"></div>
             </div>
           </div>
-        </div>
-
-        <div class="panel-section">
-          <h3>本局事件</h3>
-          <ul id="events"><li class="muted">暂无</li></ul>
-        </div>
-        <div class="panel-section">
-          <h3>棋友画像（下棋行为统计，非医疗诊断）</h3>
-          <div id="profile" class="muted">开局后逐步生成…</div>
-        </div>
-        <div class="panel-section">
-          <h3>长期记忆</h3>
-          <ul id="memories"><li class="muted">暂无</li></ul>
         </div>
       </aside>
 
@@ -217,6 +221,7 @@
         </div>
       </aside>
     </section>
+    </main>
   </div>
 
   <!-- 查看棋谱模态（可回放棋盘） -->

@@ -455,7 +455,9 @@
           if (el.emotionChip) el.emotionChip.textContent = "情绪 平静";
         };
         avatarAdapter.onReady = function () {
-          el.avatar.style.display = "none";
+          // 数字人就绪：显示横屏画布，隐藏 emoji 占位头像
+          var fb = document.getElementById("avatar-fallback");
+          if (fb) fb.style.display = "none";
           el.avatarContainer.classList.remove("hidden");
         };
         avatarAdapter.init();

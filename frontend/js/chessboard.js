@@ -161,7 +161,10 @@
         p.style.top = this._y(rank) + "px";
         p.dataset.file = file;
         p.dataset.rank = rank;
-        p.style.width = p.style.height = Math.min(this._layout.stepX, this._layout.stepY) * 0.82 + "px";
+        const ps = Math.min(this._layout.stepX, this._layout.stepY) * 0.82;
+        p.style.width = p.style.height = ps + "px";
+        // 问题：棋子字号随棋盘缩放同步（此前用 vw clamp，棋盘缩小后字过大/不协调）
+        p.style.fontSize = (ps * 0.46) + "px";
         if (this.selected && this.selected.file === file && this.selected.rank === rank) p.classList.add("selected");
         if (this.aiFrom && this.aiFrom[0] === file && this.aiFrom[1] === rank) p.classList.add("ai-last");
         if (this.aiTo && this.aiTo[0] === file && this.aiTo[1] === rank) p.classList.add("ai-last");

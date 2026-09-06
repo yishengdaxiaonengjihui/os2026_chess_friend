@@ -69,10 +69,25 @@ body {
 }
 @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
 
-/* ---- 对局室：锁单屏无页面滚动条（三列：数字人 / 棋盘 / 操作键）---- */
+/* ---- 应用骨架：顶栏常驻，内容区填充剩余高度（对局室不遮挡顶栏）---- */
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+.app-main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.app-main > #menu-area { flex: 1; min-height: 0; overflow-y: auto; }
+.app-main > #game-layout { flex: 1; min-height: 0; }
+
+/* ---- 对局室：顶栏下方填充剩余空间（三列：数字人 / 棋盘 / 操作键）---- */
 #game-layout {
-  position: fixed;
-  inset: 0;
   overflow: hidden;
   margin: 0;
   max-width: 100%;
@@ -89,14 +104,15 @@ body {
 #game-layout .board {
   width: auto;
   max-width: 100%;
-  height: min(calc(100vh - 172px), 756px);
+  height: min(100%, 756px);
   aspect-ratio: 9 / 10;
+  max-height: calc(100vh - 130px);
 }
 #game-layout .board-side {
   max-width: min(720px, 100%);
 }
 #game-layout .companion {
-  height: calc(100vh - 28px);
+  height: 100%;
   min-height: 0;
   overflow-y: auto;
   padding-right: 4px;
@@ -106,7 +122,7 @@ body {
 
 /* 右列：操作键竖排 */
 #game-layout .ops-col {
-  height: calc(100vh - 28px);
+  height: 100%;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -176,7 +192,7 @@ body {
   width: 10.2%;
   height: 8.2%;
   display: flex; align-items: center; justify-content: center;
-  font-size: clamp(20px, 4.2vw, 40px);
+  font-size: 18px; /* 兜底：实际字号由 chessboard.js 按棋子尺寸内联设置 */
   font-weight: 700;
   border-radius: 50%;
   transform: translate(-50%, -50%);
@@ -212,10 +228,45 @@ body {
 .side-label.black { color: var(--black); font-weight: 700; }
 
 .companion { display: flex; flex-direction: column; gap: 14px; }
-.avatar-card {
-  display: flex; align-items: center; gap: 14px;
-  background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 14px;
-  box-shadow: 0 3px 10px rgba(120,80,30,.15);
+
+/* ---- 横屏数字人舞台（16:9，贴合数字人视频流比例）---- */
+.dh-stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 14px;
+  overflow: hidden;
+  background: linear-gradient(180deg, #f7ecd8 0%, #e7d3a8 100%);
+  border: 2px solid var(--line);
+  box-shadow: 0 4px 14px rgba(120,80,30,.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.dh-stage .avatar-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+  border: none;
+  background: transparent;
+}
+.dh-stage .avatar-canvas.hidden { display: none; }
+.avatar-fallback {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.dh-stage:not(:has(.avatar-canvas:not(.hidden))) .avatar-fallback { display: flex; }
+.dh-stage-meta {
+  position: absolute;
+  bottom: 8px; left: 8px; right: 8px;
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  flex-wrap: wrap;
 }
 .avatar {
   width: 76px; height: 76px; border-radius: 50%;
@@ -224,7 +275,6 @@ body {
   box-shadow: inset 0 -4px 10px rgba(0,0,0,.2), 0 2px 6px rgba(120,80,30,.25);
 }
 .avatar-name { font-size: 20px; font-weight: 700; }
-.avatar-meta { display: flex; flex-direction: column; gap: 6px; }
 .chip { display: inline-block; font-size: 15px; background: #fdf0d3; color: #8a5a12; border: 1px solid #ecd7a5; border-radius: 20px; padding: 3px 12px; }
 
 .speech {
@@ -330,15 +380,7 @@ body {
 }
 .game-actions button:hover { background: linear-gradient(180deg, #fbe9b8 0%, #f2d890 100%); transform: translateY(-1px); }
 
-.avatar-canvas {
-  width: 100%;
-  height: 220px;
-  border-radius: 12px;
-  overflow: hidden;
-  background: linear-gradient(180deg, #f7ecd8 0%, #efe0c0 100%);
-  border: 1px solid var(--line);
-}
-.avatar-canvas.hidden { display: none; }
+/* 数字人横屏画布（旧竖屏样式移除；现由 .dh-stage 内 16:10 横屏承载） */
 
 /* ---- 悔棋 / 棋谱库 / 模态框（适老化：大按钮、大字）---- */
 .mini-btn {
