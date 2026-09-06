@@ -1,8 +1,9 @@
 """言语触发决策器（问题1）★
 
 取消「落子=必说话」绑定：按强/弱事件概率决定是否开口。
-强事件(将军/吃子/绝杀/局势大幅波动) 85% 触发点评；弱事件(平淡招法) 15%。
-4.5 秒发言冷却避免连续喋喋不休；连续 8 步静默则强制保底一句，防止整局哑巴。
+问题13：进一步压低开口频率，像真人——强事件(将军/吃子/绝杀/局势大幅波动)
+60% 触发点评；弱事件(平淡招法) 8%；8 秒发言冷却避免连续喋喋不休；
+连续 10 步静默才强制保底一句，防止整局哑巴。
 不需要说话时仅播放数字人思考动画、静默思索。
 """
 from __future__ import annotations
@@ -10,10 +11,10 @@ from __future__ import annotations
 import random
 import time
 
-STRONG_PROB = 0.85   # 强事件触发点评概率
-WEAK_PROB = 0.15     # 弱事件触发点评概率
-COOLDOWN_SECONDS = 4.5
-SILENT_STREAK_MAX = 8
+STRONG_PROB = 0.60   # 强事件触发点评概率（问题13：0.85 -> 0.60）
+WEAK_PROB = 0.08     # 弱事件触发点评概率（问题13：0.15 -> 0.08）
+COOLDOWN_SECONDS = 8.0  # 问题13：4.5s -> 8s
+SILENT_STREAK_MAX = 10  # 问题13：8 -> 10 步
 
 
 def classify_strength(
@@ -42,7 +43,7 @@ def should_speak(
     silent_streak: int = 0,
     now: float | None = None,
 ) -> bool:
-    """是否开口：强事件 85% / 弱事件 15%；4.5s 冷却内静默；连续 8 步静默强制保底。"""
+    """是否开口：强事件 60% / 弱事件 8%；8s 冷却内静默；连续 10 步静默强制保底。"""
     now = time.time() if now is None else now
     if last_speech_ts is not None and (now - last_speech_ts) < COOLDOWN_SECONDS:
         return False  # 冷却：避免连续喋喋不休

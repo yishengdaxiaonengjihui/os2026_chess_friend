@@ -96,17 +96,23 @@
 
   let legalCache = {}; // key: fen|color -> moves[]
 
-  // 步骤3：用户长考提醒 —— 轮到用户后 N 秒没落子，AI 主动搭话一次
-  const LONG_THINK_MS = 12000;
+  // 步骤3：用户长考提醒 —— 轮到用户后较长时间没落子，AI 温和搭话
+  // 问题13：12s -> 30s 才提醒；整局最多提醒 2 次，避免频繁重复"你慢慢走"；
+  // 台词改为简短语气词（见 chatter.js thinkLong），不再是一大句。
+  const LONG_THINK_MS = 30000;
+  const LONG_THINK_MAX = 2;
   let longThinkTimer = null;
   let longThinkFired = false;
+  let longThinkCount = 0;
   function startLongThinkTimer() {
     clearLongThinkTimer();
+    if (longThinkCount >= LONG_THINK_MAX) return; // 整局最多提醒 2 次
     longThinkFired = false;
     longThinkTimer = setTimeout(function () {
       longThinkFired = true;
       if (!state.game || state.gameOver || state.busy) return;
       if (!window.Chatter) return;
+      longThinkCount += 1;
       const line = Chatter.thinkLong(currentPersonality());
       if (line) {
         el.speech.textContent = line;
@@ -211,6 +217,7 @@
     state.selected = null;
     state.targets = [];
     legalCache = {};
+    longThinkCount = 0; // 新对局重置长考提醒次数
     clearLongThinkTimer();
     state.board.setFen("");
     showSettingsForm();
@@ -839,14 +846,8 @@
       const resp = await API.makeMove(state.game.game_id, state.game.user_id, fromSq, toSq);
       // 步骤2：真人感思考停顿 —— 拿到 AI 应手后不立即落子，先"琢磨"一会儿
       setDhState("thinking");
-      // 步骤3：思考嘟囔 —— 停顿期播一句口头禅，像真人在想棋
-      if (window.Chatter) {
-        const mumble = Chatter.thinking(currentPersonality());
-        if (mumble) {
-          el.speech.textContent = mumble;
-          if (avatarAdapter) avatarAdapter.speak({ speech_text: mumble, emotion_tag: "沉思" });
-        }
-      }
+      // 问题13：去掉"每手必嘟囔"——AI 落子前不再说"嗯…这步得琢磨琢磨"，
+      // 减少开口频率，让数字人只在关键节点或用户搭话时说话，更像真人。
       const thinkDelay = aiThinkDelay(resp);
       await new Promise(function (r) { setTimeout(r, thinkDelay); });
       state.fen = resp.new_fen;
@@ -874,17 +875,19 @@
         el.emotionChip.textContent = "情绪 " + llm.emotion_tag;
         el.actionChip.textContent = "动作 " + llm.action_tag;
       } else {
-        // 问题1：言语触发决策后 AI 静默思索；步骤3：用口语库短句补一句人性化台词
-        let quietLine = "…";
-        if (window.Chatter) {
-          const banter = Chatter.afterMove(pers, resp);
-          if (banter.line) quietLine = banter.line;
-        }
-        el.speech.textContent = quietLine;
+        // 问题1：言语触发决策后 AI 静默思索。
+        // 问题13：静默就真静默——不再用口语库补话，避免后端"不开口"时前端越权播语音。
+        el.speech.textContent = "…";
         el.emotionChip.textContent = "情绪 平静";
         el.actionChip.textContent = "动作 思考";
       }
       if (resp.avatar_command) {
+        // 主动叙事（llm 为空但数字人开口）：把台词显示到气泡，与"…"区分开
+        if (!llm && resp.avatar_command.speech_text) {
+          el.speech.textContent = resp.avatar_command.speech_text;
+          el.emotionChip.textContent = "情绪 " + (resp.avatar_command.emotion_tag || "平静");
+          el.actionChip.textContent = "动作 " + (resp.avatar_command.action_tag || "idle");
+        }
         if (avatarAdapter) avatarAdapter.speak(resp.avatar_command);
         else setDhState("speaking");
       } else if (llm) {
@@ -899,15 +902,27 @@
       renderProfile(resp.profile);
       renderMemories(resp.long_term_memories);
 
-      const hasMate = resp.events.some(function (e) { return e.indexOf("将死") >= 0; });
-      const hasStale = resp.events.some(function (e) { return e.indexOf("困毙") >= 0; });
-      if (hasMate) {
+      // 对局结束优先用后端 result（win/lose/draw），更可靠；兜底按事件推断
+      if (resp.game_over || (resp.result && resp.result !== "none")) {
         state.gameOver = true;
         clearLongThinkTimer();
-        const userWon = resp.events.some(function (e) { return e.indexOf("玩家获胜") >= 0; });
-        setStatus(userWon ? "对局结束：你将死 AI，赢了！点击「开始对局」再来一盘" : "对局结束：你被将死了，AI 获胜。点击「开始对局」再来一盘");
+        if (resp.result === "win") {
+          setStatus("对局结束：你将死 AI，赢了！点击「开始对局」再来一盘");
+        } else if (resp.result === "lose") {
+          setStatus("对局结束：你被将死了，AI 获胜。点击「开始对局」再来一盘");
+        } else if (resp.result === "draw") {
+          setStatus("对局结束：困毙，和棋。点击「开始对局」再来一盘");
+        } else {
+          const hasMate = resp.events.some(function (e) { return e.indexOf("将死") >= 0; });
+          if (hasMate) {
+            const userWon = resp.events.some(function (e) { return e.indexOf("玩家获胜") >= 0; });
+            setStatus(userWon ? "对局结束：你将死 AI，赢了！点击「开始对局」再来一盘" : "对局结束：你被将死了，AI 获胜。点击「开始对局」再来一盘");
+          } else {
+            setStatus("对局结束。点击「开始对局」再来一盘");
+          }
+        }
         renderRecords();
-      } else if (hasStale) {
+      } else if (resp.events.some(function (e) { return e.indexOf("困毙") >= 0; })) {
         state.gameOver = true;
         clearLongThinkTimer();
         setStatus("对局结束：困毙，和棋。点击「开始对局」再来一盘");

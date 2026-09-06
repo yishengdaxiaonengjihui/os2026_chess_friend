@@ -143,7 +143,13 @@ function midgameDiverseMove(board, color, difficulty, rng) {
       const p = board[r][c];
       if (p && p.c === color) {
         const list = logic.getLegalMovesFiltered(board, r, c);
-        for (const t of list) all.push({ from: [r, c], to: t });
+        for (const t of list) {
+          // 送吃保护：走完这一步若己方老帅受攻(被吃/被将军)，视为非法着法，
+          // 与 legal_moves action 口径一致。防止被将死时返回"解不了将"的伪着法。
+          const nb = logic.applyMove(board, [r, c], t);
+          if (logic.isInCheck(nb, color)) continue;
+          all.push({ from: [r, c], to: t });
+        }
       }
     }
   }

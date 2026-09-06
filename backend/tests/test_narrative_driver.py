@@ -1,4 +1,6 @@
-"""问题4：主动叙事框架（占位）—— 决策器真实判断 + 内容生成占位静默。"""
+"""问题4+问题13：主动叙事节拍器 —— 决策器真实判断 + 简短口语台词 + 不打断事件。"""
+import pytest
+
 from backend.app.core.narrative_driver import (
     NarrativeContext,
     NarrativeType,
@@ -30,12 +32,24 @@ def test_game_over_no_narrative():
     assert narrate(ctx) == NarrativeType.NONE
 
 
-def test_build_narrative_placeholder_empty():
-    """叙事内容生成器为占位：默认返回空串，不打断对局。"""
-    for t in NarrativeType:
+def test_after_event_not_interrupt():
+    """关键事件后不主动插话（本步有 LLM 点评），避免叠话。"""
+    ctx = NarrativeContext(move_index=8, quiet_seconds=1.0, has_event=True)
+    assert narrate(ctx) == NarrativeType.NONE
+
+
+def test_build_narrative_returns_short_lines():
+    """叙事内容生成器只对 OPENING/QUIET 产出极短口语台词，其余静默。"""
+    for t in (NarrativeType.OPENING, NarrativeType.QUIET):
+        line = build_narrative(t, NarrativeContext())
+        assert isinstance(line, str)
+        assert 0 < len(line) <= 24  # 语气词级别，极短
+    for t in (NarrativeType.NONE, NarrativeType.AFTER_EVENT):
         assert build_narrative(t, NarrativeContext()) == ""
 
 
-def test_after_event_narrative_type():
-    ctx = NarrativeContext(move_index=8, quiet_seconds=1.0, has_event=True)
-    assert narrate(ctx) == NarrativeType.AFTER_EVENT
+def test_build_narrative_per_personality():
+    """按人格取词库；未知人格回退老张。"""
+    for personality in ("laozhang", "xiaoya", "unknown"):
+        line = build_narrative(NarrativeType.QUIET, NarrativeContext(personality=personality))
+        assert isinstance(line, str) and line

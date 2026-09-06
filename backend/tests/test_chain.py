@@ -148,3 +148,40 @@ def test_profile_endpoint():
     r = client.get("/api/profiles/u-test-3")
     assert r.status_code == 200
     assert "nickname" in r.json()["profile"]
+
+
+def test_narrative_plays_through_avatar(monkeypatch):
+    """问题4+问题13：主动叙事台词真正进入 avatar_command 播放链路（而非只入记忆）。
+
+    强制关闭 LLM 点评（should_speak=False -> speak_now=False），连走 6 手
+    （NARRATIVE_INTERVAL_MOVES=6），第 6 手必触发一次主动叙事；断言其
+    narrative.text 非空，且 avatar_command.speech_text == narrative.text。
+    """
+    from backend.app.api import routes
+
+    monkeypatch.setattr(routes._settings, "speech_trigger_enabled", True)
+    monkeypatch.setattr(routes, "should_speak", lambda **kw: False)  # 永不 LLM 点评
+    g = client.post("/api/games", json={"user_id": "u-narr", "personality": "laozhang"}).json()
+    fen = g["fen"]
+    fired = None
+    for _ in range(6):
+        legal = client.get("/api/moves/legal", params={"fen": fen, "color": "red"}).json()
+        assert legal["moves"]
+        mv = legal["moves"][0]
+        r = client.post(
+            "/api/moves",
+            json={"game_id": g["game_id"], "user_id": "u-narr", "from_sq": mv["from"], "to_sq": mv["to"]},
+        )
+        assert r.status_code == 200
+        body = r.json()
+        fen = body["new_fen"]
+        if body.get("narrative") and body["narrative"].get("text"):
+            fired = body
+    assert fired is not None, "连走 6 手后应触发至少一次主动叙事"
+    n = fired["narrative"]
+    assert n["text"]  # 台词非空
+    # 关键：主动叙事台词必须真正进入数字人播放链路（avatar_command）
+    assert fired["avatar_command"] is not None
+    assert fired["avatar_command"]["speech_text"] == n["text"]
+    assert fired["llm_output"] is None  # 主动叙事发生在静默（非 LLM 点评）分支
+    routes._sessions.pop(g["game_id"], None)

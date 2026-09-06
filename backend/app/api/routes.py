@@ -31,7 +31,7 @@ from ..core import (
 from ..core.chess_engine import ai_move, legal_moves, position_status, score_to_win_prob
 from ..core.term_filter import sanitize_speech
 from ..core.input_filter import InputFilter, is_noise
-from ..core.narrative_driver import NarrativeContext, build_narrative, narrate
+from ..core.narrative_driver import NARRATIVE_INTERVAL_MOVES, NarrativeContext, build_narrative, narrate
 from ..core.memory_manager import detect_personal_info
 from ..core.speech_trigger_decider import classify_strength, should_speak
 from ..core.model_registry import get_runtime_model, list_models, set_runtime_model
@@ -207,9 +207,9 @@ def _result_from_engine(
     if engine_res.get("from_sq") is None:
         # AI 无合法着法：需要判定是 AI 被将死(用户胜)还是困毙(和棋)
         status = position_status(user_fen, color=ai_color)
-        if status.get("checkmate"):
+        if status.get("is_checkmate"):
             return "win"
-        if status.get("stalemate"):
+        if status.get("is_stalemate"):
             return "draw"
     return None
 
@@ -337,9 +337,9 @@ def make_move(req: MoveRequest) -> MoveResponse:
         events.append("困毙：玩家无棋可走")
     elif engine_res.get("from_sq") is None and not ai_king_lost and not user_king_lost:
         status = position_status(user_fen, color=ai_color)
-        if status.get("checkmate"):
+        if status.get("is_checkmate"):
             events.append("将死：AI 被将死，玩家获胜！")
-        elif status.get("stalemate"):
+        elif status.get("is_stalemate"):
             events.append("困毙：AI 无棋可走，和棋")
 
     # 5) 标准化博弈上下文（用户视角胜率）
@@ -426,8 +426,9 @@ def make_move(req: MoveRequest) -> MoveResponse:
         avatar_cmd = sess["dispatcher"].think_only()
         sess["silent_streak"] = sess.get("silent_streak", 0) + 1
 
-    # 问题4：主动叙事框架（占位）—— 判断是否到了该主动讲小故事的时机；
-    # 当前 build_narrative 默认返回空串（不打断对局），仅把决策结果透出给前端。
+    # 问题4 + 问题13：主动叙事（参考 ProactiveAgent 节拍器）——
+    # 大部分时间安静，只在「距上次主动叙事足够远」且「本步无强 LLM 点评」
+    # 时才主动说一句简短家常话；按手数间隔限频，避免频繁开口。
     n_ctx = NarrativeContext(
         move_index=sess["move_index"],
         game_over=sess["game_over"],
@@ -437,10 +438,22 @@ def make_move(req: MoveRequest) -> MoveResponse:
         personality=sess["personality"],
     )
     n_type = narrate(n_ctx)
-    narrative_text = build_narrative(n_type, n_ctx)  # 占位：默认空
+    narrative_text = ""
+    last_narr = sess.get("last_narrative_move", 0)
+    # 限频：距上次主动叙事至少 NARRATIVE_INTERVAL_MOVES 手；本步 LLM 已说话则不叠
+    if not speak_now and (sess["move_index"] - last_narr) >= NARRATIVE_INTERVAL_MOVES:
+        narrative_text = build_narrative(n_type, n_ctx)
     if narrative_text:
-        # 框架未来接入故事后：入记忆 + 交给数字人播报
         sess["memory"].remember_turn("assistant", narrative_text)
+        sess["last_narrative_move"] = sess["move_index"]
+        # 主动叙事台词真正交给数字人播报（此前只入记忆、不开口）。
+        # 与 LLM 点评走同一条具身指令链路：play_sync 入队 -> 前端 avatarAdapter.speak。
+        avatar_cmd = sess["dispatcher"].play_sync(
+            PerformanceCommand(speech_text=narrative_text, emotion_tag="平静", action_tag="idle")
+        )
+        # 叙事也算一次开口：更新发言时间戳、重置静默计数，避免与"连续静默保底"打架
+        sess["last_speech_ts"] = time.time()
+        sess["silent_streak"] = 0
 
     # 12) 落盘棋谱 + 对局事件广播（供前端实时感知）
     append_move_record(sess["game_id"], sess["move_index"], user_move.to_dict(), engine_res, ai_new_fen, events)
@@ -454,6 +467,8 @@ def make_move(req: MoveRequest) -> MoveResponse:
         ai_move=engine_res,
         new_fen=ai_new_fen,
         events=events,
+        result=result,
+        game_over=bool(sess["game_over"]),
         llm_output=LLMOutput(**llm_out) if llm_out else None,
         avatar_command=avatar_cmd,
         long_term_memories=recall["long_term"],

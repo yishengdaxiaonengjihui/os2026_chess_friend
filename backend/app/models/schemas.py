@@ -69,6 +69,8 @@ class MoveResponse(BaseModel):
     ai_move: dict[str, Any]
     new_fen: str
     events: list[str]
+    result: Optional[str] = None      # 'win' | 'lose' | 'draw' | None（用户视角；对局结束才有值）
+    game_over: bool = False           # 本步后对局是否结束
     llm_output: Optional[LLMOutput] = None  # 问题1：言语触发决策后可能静默（不发言）
     avatar_command: Optional[dict[str, Any]] = None
     long_term_memories: list[str]

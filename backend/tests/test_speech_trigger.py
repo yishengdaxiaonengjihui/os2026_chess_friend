@@ -16,19 +16,21 @@ def test_classify_strength():
 
 
 def test_should_speak_cooldown_and_streak():
-    # 4.5s 冷却内：即使强事件也静默（避免连续喋喋不休）
+    # 8s 冷却内：即使强事件也静默（避免连续喋喋不休）
     assert should_speak(is_strong=True, last_speech_ts=100.0, now=100.1, silent_streak=0) is False
     # 冷却已过、弱事件：走概率分支（返回值必须是布尔）
     assert should_speak(is_strong=False, last_speech_ts=100.0, now=105.0, silent_streak=0) in (True, False)
-    # 连续 8 步静默：保底强制开口
-    assert should_speak(is_strong=False, last_speech_ts=None, silent_streak=8) is True
+    # 连续 10 步静默：保底强制开口（问题13：8 -> 10 步才保底）
+    assert should_speak(is_strong=False, last_speech_ts=None, silent_streak=10) is True
+    # 未到 10 步：走概率分支，不强制
+    assert should_speak(is_strong=False, last_speech_ts=None, silent_streak=9) in (True, False)
 
 
 def test_probability_branches(monkeypatch):
     monkeypatch.setattr("backend.app.core.speech_trigger_decider.random.random", lambda: 0.5)
-    # 弱事件 15%：0.5 > 0.15 -> 不说话
+    # 弱事件 8%：0.5 > 0.08 -> 不说话（问题13：15% -> 8%）
     assert should_speak(is_strong=False, last_speech_ts=None, silent_streak=0) is False
-    # 强事件 85%：0.5 < 0.85 -> 说话
+    # 强事件 60%：0.5 < 0.60 -> 说话（问题13：85% -> 60%）
     assert should_speak(is_strong=True, last_speech_ts=None, silent_streak=0) is True
 
 
