@@ -260,9 +260,8 @@ body {
   gap: 8px;
 }
 .dh-stage:not(:has(.avatar-canvas:not(.hidden))) .avatar-fallback { display: flex; }
+/* 状态行：舞台下方独立一行，不遮挡数字人 */
 .dh-stage-meta {
-  position: absolute;
-  bottom: 8px; left: 8px; right: 8px;
   display: flex;
   gap: 6px;
   justify-content: center;
