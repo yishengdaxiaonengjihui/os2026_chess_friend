@@ -39,17 +39,36 @@ def test_after_event_not_interrupt():
 
 
 def test_build_narrative_returns_short_lines():
-    """叙事内容生成器只对 OPENING/QUIET 产出极短口语台词，其余静默。"""
-    for t in (NarrativeType.OPENING, NarrativeType.QUIET):
-        line = build_narrative(t, NarrativeContext())
-        assert isinstance(line, str)
-        assert 0 < len(line) <= 24  # 语气词级别，极短
+    """开场台词保持极短；其余类型（NONE/AFTER_EVENT）静默。"""
+    line = build_narrative(NarrativeType.OPENING, NarrativeContext())
+    assert isinstance(line, str)
+    assert 0 < len(line) <= 24  # 开场词，极短
     for t in (NarrativeType.NONE, NarrativeType.AFTER_EVENT):
         assert build_narrative(t, NarrativeContext()) == ""
 
 
+def test_quiet_uses_persona_stories():
+    """静默时优先讲人格 stories（短回忆片段，真正"讲小故事"）。"""
+    from backend.app.core.persona_store import stories as persona_stories
+
+    for personality in ("laozhang", "xiaoya"):
+        line = build_narrative(NarrativeType.QUIET, NarrativeContext(personality=personality))
+        assert isinstance(line, str) and line
+        assert line in persona_stories(personality)
+
+
+def test_quiet_fallback_without_stories(monkeypatch):
+    """人格没有 stories 时回退语气词库，不崩。"""
+    from backend.app.core import narrative_driver as nd
+
+    monkeypatch.setattr(nd, "persona_stories", lambda p: [])
+    for personality in ("laozhang", "xiaoya", "unknown"):
+        line = build_narrative(NarrativeType.QUIET, NarrativeContext(personality=personality))
+        assert isinstance(line, str) and line
+
+
 def test_build_narrative_per_personality():
-    """按人格取词库；未知人格回退老张。"""
+    """按人格取词库/故事；未知人格回退老张。"""
     for personality in ("laozhang", "xiaoya", "unknown"):
         line = build_narrative(NarrativeType.QUIET, NarrativeContext(personality=personality))
         assert isinstance(line, str) and line

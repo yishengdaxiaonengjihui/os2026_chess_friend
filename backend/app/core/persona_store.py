@@ -1,9 +1,9 @@
 """轻量人格仓库（问题6）★
 
-人格设定外置为 personas.json（梗概常驻 + 外置故事 JSON 占位）：
+人格设定外置为 personas.json（梗概常驻 + 外置故事 JSON）：
 - synopsis：人格梗概，常驻系统角色 —— 决定棋友说话的语气与身份。
-- story：外置故事（如棋友的小故事/背景设定），默认空占位；
-  后续可填充分支剧情，按需注入 prompt 作为「你记得的故事」。
+- story：外置故事（棋友的背景往事），非空时注入 prompt 作为「你记得的往事」。
+- stories：短回忆片段列表（1~2 句/条），供主动叙事（narrative_driver）随机挑一条讲。
 - hooks：触发钩子（占位，如特定棋局事件时注入对应故事片段）。
 
 好处：人格即数据，改 JSON 不用改代码；故事可外扩不膨胀 prompt。
@@ -28,6 +28,7 @@ def load_personas() -> dict[str, Any]:
                         "现在作为独居老人李大爷的专属数字人象棋棋友陪他下棋。"
                         "你既是合格的棋手，也是能给棋友带来陪伴感的老朋友。",
             "story": "",
+            "stories": [],
             "hooks": [],
         },
         "xiaoya": {
@@ -35,6 +36,7 @@ def load_personas() -> dict[str, Any]:
                         "现在作为独居老人李大爷的专属数字人象棋陪练陪他下棋。"
                         "你认真对待每一步棋，多用鼓励的语气，帮棋友放松心态。",
             "story": "",
+            "stories": [],
             "hooks": [],
         },
     }
@@ -48,6 +50,7 @@ def load_personas() -> dict[str, Any]:
             merged[pid] = {
                 "synopsis": p.get("synopsis") or default.get(pid, {}).get("synopsis", ""),
                 "story": p.get("story") or "",
+                "stories": p.get("stories") or [],
                 "hooks": p.get("hooks") or [],
             }
         return merged
@@ -71,12 +74,17 @@ def synopsis(personality: str) -> str:
 
 
 def story(personality: str) -> str:
-    """外置故事（占位；非空时才注入 prompt）。"""
+    """外置背景往事（非空时才注入 prompt）。"""
     return persona_for(personality)["story"]
 
 
+def stories(personality: str) -> list[str]:
+    """短回忆片段列表（供主动叙事随机挑一条讲）。"""
+    return persona_for(personality).get("stories") or []
+
+
 def story_prompt_block(personality: str) -> str:
-    """故事注入块：有故事时返回「你记得的故事」段落，否则空串。"""
+    """故事注入块：有故事时返回「你记得的往事」段落，否则空串。"""
     s = story(personality).strip()
     if not s:
         return ""

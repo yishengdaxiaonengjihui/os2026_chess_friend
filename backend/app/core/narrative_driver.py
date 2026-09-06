@@ -9,7 +9,8 @@ calculator）：大部分时间"休眠"，只有在经过一段安静间隔、�
 - narrate() 决策器：判断当前是否该主动叙事（对局开场、长时间静默），
   并给出叙事类型。
 - build_narrative() 内容生成器：按叙事类型返回一句**简短**、**口语化**
-  的家常话（固定语气词库 + 按人格/局面微调），不打断对局。
+  的台词。静默时优先从人格的 stories（短回忆片段，personas.json）随机
+  挑一条讲——"真正讲点小故事"；没有故事时回退固定语气词库。
 - 节拍：由调用方（routes）按手数间隔限频，避免 12 手后每手都主动说。
 """
 from __future__ import annotations
@@ -18,6 +19,8 @@ import random
 import time
 from dataclasses import dataclass
 from enum import Enum
+
+from .persona_store import stories as persona_stories
 
 
 class NarrativeType(str, Enum):
@@ -45,7 +48,8 @@ QUIET_TRIGGER_MOVES = 10      # 连续多手无话也主动找话题
 NARRATIVE_INTERVAL_MOVES = 6  # 主动叙事最少间隔手数（节拍器频率）
 
 
-# 简短家常语气词库（极短、口语化、不机械）——问题13：只给语气词级别
+# 简短家常语气词库（极短、口语化、不机械）——问题13：只给语气词级别；
+# 仅在没有 stories 时作为兜底。
 _QUIET_LINES = {
     "laozhang": [
         "嗯，这盘下得有味儿。",
@@ -101,10 +105,15 @@ def build_narrative(n_type: NarrativeType, ctx: NarrativeContext) -> str:
     """叙事内容生成器：按类型返回一句简短口语化台词。
 
     只对 OPENING / QUIET 生成；其余返回空串（不插话）。
-    台词极短（语气词级别），符合"像正常人、不频繁"的要求。
+    - OPENING：打招呼（固定开场词）。
+    - QUIET：优先随机讲一条人格 stories（短回忆，真正"讲小故事"）；
+      stories 为空时回退语气词库。
     """
     if n_type == NarrativeType.OPENING:
         return random.choice(_lines_for(ctx.personality, "opening"))
     if n_type == NarrativeType.QUIET:
+        snips = persona_stories(ctx.personality)
+        if snips:
+            return random.choice(snips)
         return random.choice(_lines_for(ctx.personality, "quiet"))
     return ""

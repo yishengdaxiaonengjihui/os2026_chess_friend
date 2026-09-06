@@ -17,10 +17,21 @@ def test_synopsis_always_present():
     assert "小雅" in system_role_for("xiaoya")
 
 
-def test_story_placeholder_empty_by_default():
-    """外置故事默认占位为空：不注入「你记得的往事」段落。"""
-    assert ps.story("laozhang") == ""
-    assert "你记得的往事" not in system_role_for("laozhang")
+def test_story_filled_from_json():
+    """外置背景往事已填充：非空并注入「你记得的往事」段落。"""
+    assert ps.story("laozhang") != ""
+    assert ps.story("xiaoya") != ""
+    assert "你记得的往事" in system_role_for("laozhang")
+    assert "你记得的往事" in system_role_for("xiaoya")
+
+
+def test_stories_snippets_available():
+    """每个棋友都有短回忆片段（供主动叙事随机讲）。"""
+    for p in ("laozhang", "xiaoya"):
+        snips = ps.stories(p)
+        assert isinstance(snips, list) and len(snips) >= 3
+        for s in snips:
+            assert isinstance(s, str) and len(s) > 0
 
 
 def test_story_injected_when_present(monkeypatch):
@@ -39,6 +50,7 @@ def test_personas_json_is_editable():
     assert "laozhang" in data["personas"]
     assert "synopsis" in data["personas"]["laozhang"]
     assert "story" in data["personas"]["laozhang"]
+    assert "stories" in data["personas"]["laozhang"]
 
 
 def test_persona_synopsis_has_speech_style():
