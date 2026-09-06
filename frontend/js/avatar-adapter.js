@@ -50,7 +50,9 @@
 
   function estimateMs(text) {
     var n = (text || "").length;
-    return Math.max(1000, n * 120); // 与后端 estimate_seconds 同口径
+    // 保守估算：字数*130ms + 800ms 安全余量，确保"播完"回调晚于实际发声结束，
+    // 这样恢复麦克风时 TTS 已彻底播完，尾音不会被收进去
+    return Math.max(1500, n * 130 + 800);
   }
 
   function AvatarAdapter(opts) {

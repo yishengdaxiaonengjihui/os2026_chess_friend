@@ -578,24 +578,32 @@
     if (el.voiceStatus) el.voiceStatus.textContent = "已停止听讲，点麦克风重新开启";
   }
 
-  // ---- 回声防护：数字人发声期间暂停麦克风识别，播完恢复 ----
+  // ---- 回声防护：数字人发声期间彻底关闭麦克风，播完(留余量)恢复 ----
   let srMuted = false; // 是否被数字人播放静音（非用户主动停止）
+  let srUnmuteTimer = null; // 恢复识别延时（等 TTS 尾音/混响过去）
+  const SR_UNMUTE_DELAY = 600; // 播完后再等 0.6s 恢复，杜绝尾音回声
   function voiceMute() {
     srMuted = true;
     stopSilenceCheck();
+    if (srUnmuteTimer) { clearTimeout(srUnmuteTimer); srUnmuteTimer = null; }
     srFinal = ""; // 丢弃静音瞬间可能残留的半句识别，防止误发
     if (el.voiceText) el.voiceText.textContent = "";
-    if (sr && srActive) { try { sr.stop(); } catch (e) { /* 忽略 */ } }
+    // 用 abort() 立即终止并丢弃全部已采集音频（stop() 会先处理缓冲，TTS 开头仍可能被收进去）
+    if (sr && srActive) { try { sr.abort(); } catch (e) { /* 忽略 */ } }
     srActive = false;
     if (el.btnMic) el.btnMic.classList.remove("listening");
   }
   function voiceUnmute() {
     srMuted = false;
-    // 自动监听模式下恢复识别（仍在对局、未被用户手动关闭时）
-    if (srAuto && state.game && !state.gameOver && sr) {
-      srLastActive = Date.now();
-      if (!srActive) startListening();
-    }
+    // 自动监听模式下恢复识别（仍在对局、未被用户手动关闭时），延迟等尾音过去
+    if (srUnmuteTimer) { clearTimeout(srUnmuteTimer); srUnmuteTimer = null; }
+    srUnmuteTimer = setTimeout(function () {
+      srUnmuteTimer = null;
+      if (srAuto && state.game && !state.gameOver && sr) {
+        srLastActive = Date.now();
+        if (!srActive) startListening();
+      }
+    }, SR_UNMUTE_DELAY);
   }
 
   // ---- 回声过滤（用户方案：字幕历史 + 相邻行相似度 + 时间窗）----
