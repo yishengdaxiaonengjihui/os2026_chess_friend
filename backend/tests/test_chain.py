@@ -144,6 +144,38 @@ def test_game_over_blocks_moves():
     routes._sessions.pop(g["game_id"], None)
 
 
+def test_checkmate_detected_win_directly(monkeypatch):
+    """绝杀判赢：玩家一手将死 AI 时直接判胜（result=win + game_over），无需再吃老将。
+
+    构造合法将死局面（卧槽马杀：红车 h9→e9 将死黑将，黑无合法应手），
+    全链路验证：AI 无着法（from_sq=None）时后端按 position_status 判将死并终局。
+    """
+    from backend.app.api import routes
+
+    monkeypatch.setattr(routes._settings, "speech_trigger_enabled", False)
+    g = client.post("/api/games", json={"user_id": "u-mate", "personality": "laozhang"}).json()
+    # 直接置为"红方一手杀"局面：车 h9->e9 后 卧槽马(马 f2) + 车 双将，黑将无路可逃
+    routes._sessions[g["game_id"]]["fen"] = "4k1R2/5p3/5N3/9/9/9/9/9/9/3K3R1 w - - 0 1"
+    r = client.post(
+        "/api/moves",
+        json={"game_id": g["game_id"], "user_id": "u-mate", "from_sq": "h9", "to_sq": "e9"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    # 关键：将死即终局，不必吃掉对方老将
+    assert body["result"] == "win"
+    assert body["game_over"] is True
+    assert any("将死" in e and "AI" in e for e in body["events"])
+    assert body["ai_move"]["from_sq"] is None  # AI 无合法应手（被将死）
+    # 终局后再落子应 400
+    r2 = client.post(
+        "/api/moves",
+        json={"game_id": g["game_id"], "user_id": "u-mate", "from_sq": "h9", "to_sq": "e9"},
+    )
+    assert r2.status_code == 400
+    routes._sessions.pop(g["game_id"], None)
+
+
 def test_profile_endpoint():
     r = client.get("/api/profiles/u-test-3")
     assert r.status_code == 200

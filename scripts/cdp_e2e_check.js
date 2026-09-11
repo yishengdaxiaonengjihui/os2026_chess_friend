@@ -1,5 +1,6 @@
 // CDP 前端 E2E 验证（第三轮接力）：绝杀判赢(result 字段渲染) / 主动叙事台词真正播放
-// 用法: node scripts/_cdp_e2e.js <port> <baseUrl>
+// 额外校验后端为新代码（响应含 result/game_over 字段）——可抓住"旧后端未重启"回归
+// 用法: node scripts/cdp_e2e_check.js <port> <baseUrl>
 "use strict";
 const http = require("http");
 
@@ -14,6 +15,22 @@ function getJson(url) {
       res.on("data", (c) => (d += c));
       res.on("end", () => { try { resolve(JSON.parse(d)); } catch (e) { reject(e); } });
     }).on("error", reject);
+  });
+}
+function postJson(url, data) {
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify(data);
+    const req = http.request(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+    }, (res) => {
+      let d = "";
+      res.on("data", (c) => (d += c));
+      res.on("end", () => { try { resolve(JSON.parse(d)); } catch (e) { reject(e); } });
+    });
+    req.on("error", reject);
+    req.write(body);
+    req.end();
   });
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -136,6 +153,18 @@ async function main() {
       pageErrors.push(msg.params.args.map((a) => a.value || a.description || "").join(" "));
     }
   });
+
+  // ---- Phase 0.5: 后端为新代码（响应含 result/game_over）----
+  try {
+    const g = await postJson(BASE + "/api/games", { user_id: "cdp-fresh-" + Date.now(), personality: "laozhang" });
+    const legal = await getJson(`${BASE}/api/moves/legal?fen=${encodeURIComponent(g.fen)}&color=red`);
+    const mv = legal.moves[0];
+    const r = await postJson(BASE + "/api/moves", { game_id: g.game_id, user_id: "cdp-fresh", from_sq: mv.from, to_sq: mv.to });
+    const hasFields = Object.prototype.hasOwnProperty.call(r, "result") && Object.prototype.hasOwnProperty.call(r, "game_over");
+    check("后端新代码：响应含 result/game_over 字段", !!hasFields, "keys=" + Object.keys(r).join(","));
+  } catch (e) {
+    check("后端新代码：响应含 result/game_over 字段", false, "ERR " + String(e && e.message || e));
+  }
 
   // ---- Phase 0: 页面就绪 + 登录 ----
   const ready = await pollEval(`document.readyState === 'complete'`, 10000);
