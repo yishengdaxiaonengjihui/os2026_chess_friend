@@ -141,7 +141,13 @@ function openingDiverseMove(board, color, moveNumber, rng) {
 
 // 中局候选加权随机：枚举全部合法着法（用已暴露的 getLegalMovesFiltered），
 // 对每个用 evaluateBoard 打分，取 topN 按权重选择，避免每次都是同一手棋。
-function midgameDiverseMove(board, color, difficulty, rng) {
+// targetUserWinProb（可选，0~1）：动态胜率控制 —— 把"下一步用户胜率"拉向目标
+// （默认 0.5 = 势均力敌）。权重 = 最优接近度 × 目标接近度；AI 被压制到用户胜率
+// <=0.35 时走最优（不故意放水送死）。
+function userWinOf(score) { // 评估分(对 AI) -> 用户视角胜率，与 python score_to_win_prob 同口径
+  return 1 - 1 / (1 + Math.exp(-score / 250));
+}
+function midgameDiverseMove(board, color, difficulty, rng, targetUserWinProb) {
   const all = [];
   for (let r = 0; r < 10; r++) {
     for (let c = 0; c < 9; c++) {
@@ -169,9 +175,22 @@ function midgameDiverseMove(board, color, difficulty, rng) {
   const topN = Math.max(2, Math.min(6, Math.round(8 - difficulty * 0.8)));
   const candidates = scored.slice(0, topN);
   const best = candidates[0].s;
-  // 权重：与最优分差越近权重越高（softmax 风格，温差=120）
+  // 动态胜率控制：AI 最优着也把用户压到 <=35% 胜率 -> 走最优，不装傻不放水
+  const target = (typeof targetUserWinProb === "number" && targetUserWinProb > 0) ? targetUserWinProb : null;
+  if (target !== null && userWinOf(best) <= 0.35) {
+    return { from: candidates[0].m.from, to: candidates[0].m.to, score: best, candidates: topN };
+  }
+  // 权重：与最优分差越近权重越高（softmax 风格，温差=120）；
+  // 目标胜率开启时，再乘"目标接近度"权重（|userWin - target| 越小权重越高，温差=0.12）
   const temp = 120;
-  const weights = candidates.map((c) => Math.exp((c.s - best) / temp));
+  const weights = candidates.map((c) => {
+    let w = Math.exp((c.s - best) / temp);
+    if (target !== null) {
+      const uw = userWinOf(c.s);
+      w *= Math.exp(-Math.abs(uw - target) / 0.12);
+    }
+    return w;
+  });
   const total = weights.reduce((a, b) => a + b, 0);
   let r = rng() * total;
   let chosen = candidates[0];
@@ -245,7 +264,7 @@ try {
 
     // 问题8：中局候选加权随机（以概率走「加权候选」而非「深搜最优」）
     if (!mv && diversity && Math.random() < diversityProb) {
-      mv = midgameDiverseMove(board, color, input.difficulty || 3, Math.random);
+      mv = midgameDiverseMove(board, color, input.difficulty || 3, Math.random, input.targetUserWinProb);
     }
 
     // 兜底：正常引擎搜索（含原开局库）

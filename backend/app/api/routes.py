@@ -145,7 +145,12 @@ def _new_session(
         "memory": memory,
         "dispatcher": AvatarDispatcher(),
         "ai_opening": None,  # 执黑时 AI(红) 的首着
-        "told_stories": set(),  # 主动叙事已讲过的片段（会话内去重）
+        "told_stories": set(),  # 主动叙事已讲过的片段（会话内去重，碎片兜底用）
+        # 动态胜率控制（auto 档局内自适应）
+        "diff_current": None,   # 局内动态难度（None=未初始化，用画像初始值）
+        "win_ema": None,        # 用户胜率 EMA 平滑值
+        # 章节式叙事：故事线进度（跨局续讲，存画像 story_state）
+        "story_state": dict((profile or {}).get("story_state") or {}),
     }
     # 数字人状态广播 -> 对局 WS 连接
     sess["dispatcher"].set_broadcaster(
@@ -157,7 +162,7 @@ def _new_session(
             er = ai_move(
                 fen,
                 color="red",
-                difficulty=_strength_to_difficulty(sess),
+                difficulty=_effective_difficulty(sess),
                 move_number=1,
             )
             if er["from_sq"]:
@@ -178,8 +183,17 @@ def _new_session(
     return sess
 
 
+# ---- 动态胜率控制（auto 档局内自适应，目标用户胜率 ~50%）----
+_DIFF_MIN, _DIFF_MAX = 1, 6      # auto 动态难度范围
+_WIN_TARGET = 0.5                # 用户视角目标胜率
+_WIN_BAND = 0.05                 # 死区 ±5%：胜率在 45%~55% 内不调难度
+_WIN_EMA_ALPHA = 0.3             # 胜率 EMA 平滑系数（防一步烂棋剧烈跳档）
+_DIFF_TUNE_EVERY = 2             # 每 2 手评估一次
+_DIFF_TUNE_AFTER_MOVE = 6        # 开局棋谱阶段（前 6 手）不调，避免谱内乱动
+
+
 def _strength_to_difficulty(sess: dict) -> int | None:
-    """棋力选择 -> 引擎搜索深度：低1 / 中2 / 高5 / 自动按玩家平均胜率自适应。"""
+    """棋力选择 -> 引擎搜索深度：低1 / 中2 / 高5 / 自动按玩家平均胜率自适应（初始值）。"""
     st = sess.get("strength", "auto")
     if st == "low":
         return 1
@@ -195,6 +209,43 @@ def _strength_to_difficulty(sess: dict) -> int | None:
     if p > 0.6:
         return 5
     return 3
+
+
+def _effective_difficulty(sess: dict) -> int | None:
+    """实际生效难度：三档固定；auto 优先用局内动态值（diff_current），无则画像初始值。"""
+    st = sess.get("strength", "auto")
+    if st != "auto":
+        return _strength_to_difficulty(sess)
+    cur = sess.get("diff_current")
+    if cur is not None:
+        return cur
+    return _strength_to_difficulty(sess)
+
+
+def _tune_auto_difficulty(sess: dict, user_win_prob: float | None) -> None:
+    """auto 档局内动态难度：按 EMA 平滑后的用户胜率把难度往目标 50% 拉。
+
+    用户一直赢（胜率 >55%）-> AI 升一档变强；一直输（<45%）-> 降一档变弱。
+    每 _DIFF_TUNE_EVERY 手评估一次、开局阶段不调、终局不调。
+    """
+    if sess.get("strength") != "auto":
+        return
+    if user_win_prob is None or sess.get("game_over"):
+        return
+    if sess["move_index"] <= _DIFF_TUNE_AFTER_MOVE:
+        return
+    if sess["move_index"] % _DIFF_TUNE_EVERY != 0:
+        return
+    ema = sess.get("win_ema")
+    ema = user_win_prob if ema is None else _WIN_EMA_ALPHA * user_win_prob + (1 - _WIN_EMA_ALPHA) * ema
+    sess["win_ema"] = ema
+    cur = sess.get("diff_current")
+    if cur is None:
+        cur = _strength_to_difficulty(sess) or 3
+    if ema > _WIN_TARGET + _WIN_BAND:
+        sess["diff_current"] = min(cur + 1, _DIFF_MAX)
+    elif ema < _WIN_TARGET - _WIN_BAND:
+        sess["diff_current"] = max(cur - 1, _DIFF_MIN)
 
 
 def _result_from_engine(
@@ -327,7 +378,7 @@ def make_move(req: MoveRequest) -> MoveResponse:
         engine_res = ai_move(
             user_fen,
             color=ai_color,
-            difficulty=_strength_to_difficulty(sess),
+            difficulty=_effective_difficulty(sess),
             move_number=sess["move_index"],
         )
         ai_new_fen = toggle_side(engine_res["new_fen"])
@@ -360,6 +411,8 @@ def make_move(req: MoveRequest) -> MoveResponse:
 
     # 5) 标准化博弈上下文（用户视角胜率）
     user_win_prob = round(1 - engine_res["win_probability"], 4) if engine_res["win_probability"] is not None else None
+    # 动态胜率控制：auto 档按 EMA 胜率把难度拉向 50%（本步结果决定下一步难度）
+    _tune_auto_difficulty(sess, user_win_prob)
     ctx = build_context(
         user_move=user_move,
         ai_move=ai_move_obj,
@@ -466,6 +519,7 @@ def make_move(req: MoveRequest) -> MoveResponse:
         personality=sess["personality"],
         events=events,
         exclude=sess.get("told_stories", set()),
+        story_progress=sess.get("story_state") or None,
     )
     n_type = narrate(n_ctx)
     narrative_text = ""
@@ -478,6 +532,17 @@ def make_move(req: MoveRequest) -> MoveResponse:
             narrative_text = narr["text"]
             narr_emotion = narr.get("emotion_tag", "平静")
             narr_action = narr.get("action_tag", "idle")
+            # 章节式叙事：推进故事线进度（讲完一段 -> 指向下一段；整条讲完 -> 清空换新），
+            # 跨局续讲：进度写回画像（story_state），下次开局接着讲。
+            if narr.get("story_id"):
+                if narr.get("done"):
+                    sess["story_state"] = {}
+                else:
+                    sess["story_state"] = {
+                        "story_id": narr["story_id"],
+                        "seg_idx": int(narr.get("seg_idx") or 0) + 1,
+                    }
+                sess["memory"].profile_store.merge_diff(sess["user_id"], {"story_state": sess["story_state"]})
     if narrative_text:
         sess["memory"].remember_turn("assistant", narrative_text)
         sess["last_narrative_move"] = sess["move_index"]

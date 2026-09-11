@@ -245,6 +245,85 @@ def test_chat_echo_tail_ignored():
     routes._sessions.pop(g["game_id"], None)
 
 
+def test_auto_difficulty_tuning_direction():
+    """动态胜率控制：auto 档按 EMA 胜率把难度往 50% 拉（赢升档/输降档/死区不动/开局不动）。"""
+    from backend.app.api import routes
+
+    # 一直赢 -> 难度逐步升
+    sess = {"strength": "auto", "move_index": 8, "game_over": False, "win_ema": None,
+            "diff_current": None, "stats": {"avg_user_win_prob": 0.3}}
+    routes._tune_auto_difficulty(sess, 0.8)
+    assert sess["diff_current"] == 3  # 初始 2（画像 avg 0.3<0.4）+1
+    sess["move_index"] = 10
+    routes._tune_auto_difficulty(sess, 0.8)
+    assert sess["diff_current"] == 4
+    # 一直输 -> 难度降
+    sess2 = {"strength": "auto", "move_index": 8, "game_over": False, "win_ema": None,
+             "diff_current": 5, "stats": {"avg_user_win_prob": 0.6}}
+    routes._tune_auto_difficulty(sess2, 0.3)
+    assert sess2["diff_current"] == 4
+    # 死区（~50%）不动
+    sess3 = {"strength": "auto", "move_index": 8, "game_over": False, "win_ema": None,
+             "diff_current": 3, "stats": {"avg_user_win_prob": 0.5}}
+    routes._tune_auto_difficulty(sess3, 0.5)
+    assert sess3["diff_current"] == 3
+    # 开局棋谱阶段（前 6 手）不调
+    sess4 = {"strength": "auto", "move_index": 4, "game_over": False, "win_ema": None,
+             "diff_current": 3, "stats": {"avg_user_win_prob": 0.5}}
+    routes._tune_auto_difficulty(sess4, 0.9)
+    assert sess4["diff_current"] == 3
+    # 非 auto 档不调
+    sess5 = {"strength": "low", "move_index": 8, "game_over": False, "win_ema": None,
+             "diff_current": None, "stats": {"avg_user_win_prob": 0.5}}
+    routes._tune_auto_difficulty(sess5, 0.9)
+    assert sess5.get("diff_current") is None
+    # 有效难度：三档固定；auto 优先局内动态值
+    assert routes._effective_difficulty({"strength": "low"}) == 1
+    assert routes._effective_difficulty({"strength": "medium"}) == 2
+    assert routes._effective_difficulty({"strength": "high"}) == 5
+    assert routes._effective_difficulty({"strength": "auto", "diff_current": 4}) == 4
+
+
+def test_story_progress_persisted_cross_game():
+    """章节式叙事：叙事触发后故事线进度写入画像（跨局续讲），下次开局接着讲。"""
+    import backend.app.api.routes as routes_mod
+    from backend.app.api import routes
+
+    g = client.post("/api/games", json={"user_id": "u-story", "personality": "laozhang"}).json()
+    sess = routes._sessions[g["game_id"]]
+    # 让叙事可触发：开言语触发但 should_speak 恒 False（否则每手 LLM 说话会压掉叙事）
+    orig = routes_mod.should_speak
+    routes_mod.should_speak = lambda **kw: False
+    routes_mod._settings.speech_trigger_enabled = True
+    try:
+        fen = sess["fen"]
+        moves = 0
+        while moves < 24 and not sess.get("last_narrative_move", 0):
+            legal = client.get("/api/moves/legal", params={"fen": fen, "color": "red"}).json()["moves"]
+            assert legal, f"第 {moves} 手无合法着"
+            mv = legal[0]
+            r = client.post(
+                "/api/moves",
+                json={"game_id": g["game_id"], "user_id": "u-story", "from_sq": mv["from"], "to_sq": mv["to"]},
+            )
+            assert r.status_code == 200
+            body = r.json()
+            fen = body["new_fen"]
+            moves += 1
+            if body["game_over"]:
+                break
+        assert moves < 24, "24 手内应触发至少一次主动叙事"
+    finally:
+        routes_mod.should_speak = orig
+        routes_mod._settings.speech_trigger_enabled = False
+    # 叙事已触发：故事线进度非空且已持久化到画像（跨局续讲）
+    assert sess.get("story_state"), "应已开始讲章节故事线"
+    assert sess["story_state"].get("story_id") in ("wuzi-qi", "qipan-jizhu")
+    p = sess["memory"].profile_store.get("u-story")
+    assert p.get("story_state") == sess["story_state"], "故事线进度应已写回画像（跨局续讲）"
+    routes._sessions.pop(g["game_id"], None)
+
+
 def test_profile_endpoint():
     r = client.get("/api/profiles/u-test-3")
     assert r.status_code == 200

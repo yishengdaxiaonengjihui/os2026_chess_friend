@@ -1,4 +1,4 @@
-"""问题4+问题13：主动叙事节拍器 —— 决策器真实判断 + 口语台词 + 不打断事件。"""
+"""问题4+问题13：主动叙事节拍器 —— 决策器 + 章节式故事线顺序推进 + 事件源头。"""
 import pytest
 
 from backend.app.core.narrative_driver import (
@@ -7,6 +7,14 @@ from backend.app.core.narrative_driver import (
     build_narrative,
     narrate,
 )
+from backend.app.core.persona_store import storylines as persona_storylines
+
+
+def _all_segment_texts(personality: str) -> list[str]:
+    texts = []
+    for line in persona_storylines(personality):
+        texts.extend(line.get("segments") or [])
+    return texts
 
 
 def test_opening_triggers_narrative():
@@ -21,7 +29,6 @@ def test_quiet_triggers_narrative():
     """长时间静默应主动找话题（避免整局冷场）。"""
     ctx = NarrativeContext(move_index=5, quiet_seconds=45.0)
     assert narrate(ctx) == NarrativeType.QUIET
-    # 长时间未到阈值时不主动叙事
     ctx2 = NarrativeContext(move_index=5, quiet_seconds=3.0)
     assert narrate(ctx2) == NarrativeType.NONE
 
@@ -48,63 +55,69 @@ def test_build_narrative_returns_short_lines():
         assert build_narrative(t, NarrativeContext())["text"] == ""
 
 
-def test_quiet_uses_persona_stories():
-    """静默时优先讲人格 stories（短回忆片段，真正"讲小故事"）。"""
-    from backend.app.core.persona_store import stories as persona_stories
-
+def test_quiet_uses_storyline_source_first():
+    """静默时优先讲故事线，且无进度时从源头（第 0 段）开始。"""
     for personality in ("laozhang", "xiaoya"):
-        d = build_narrative(NarrativeType.QUIET, NarrativeContext(personality=personality))
+        d = build_narrative(NarrativeType.QUIET, NarrativeContext(personality=personality, move_index=10, quiet_seconds=99.0))
         assert isinstance(d, dict) and d["text"]
-        assert d["text"] in persona_stories(personality)
+        assert d["seg_idx"] == 0, "无进度时应从源头（第 0 段）开始讲"
+        assert d["text"] in _all_segment_texts(personality)
         assert d["emotion_tag"] in ("沉思", "平静", "得意")
         assert d["action_tag"] in ("idle", "nod", "smile")
 
 
-def test_quiet_fallback_without_stories(monkeypatch):
-    """人格没有 stories 时回退语气词库，不崩。"""
+def test_storyline_advances_in_order():
+    """故事线按顺序推进：源头->发展->高潮->收尾；讲完换新故事回到源头。"""
+    personality = "laozhang"
+    lines = persona_storylines(personality)
+    seg_count = len(lines[0]["segments"])
+    prog = None
+    played = []
+    for _ in range(seg_count):
+        ctx = NarrativeContext(personality=personality, move_index=10, quiet_seconds=99.0, story_progress=prog)
+        d = build_narrative(NarrativeType.QUIET, ctx)
+        played.append((d["seg_idx"], d["done"]))
+        assert d["text"] in _all_segment_texts(personality)
+        if d.get("story_id") and not d["done"]:
+            prog = {"story_id": d["story_id"], "seg_idx": d["seg_idx"] + 1}
+        elif d.get("done"):
+            prog = None
+    # 0..N-1 顺序推进，最后一段 done=True
+    assert [p[0] for p in played] == list(range(seg_count))
+    assert played[-1][1] is True
+    # 讲完 -> 换新故事从源头开始
+    d2 = build_narrative(NarrativeType.QUIET, NarrativeContext(personality=personality, move_index=10, quiet_seconds=99.0))
+    assert d2["seg_idx"] == 0
+
+
+def test_event_hit_starts_from_source():
+    """事件命中故事线 -> 从该线源头（第 0 段）讲（先抛源头），覆盖进行中的进度。"""
+    d = build_narrative(
+        NarrativeType.QUIET,
+        NarrativeContext(
+            personality="laozhang", move_index=10, quiet_seconds=99.0,
+            events=["玩家吃子：吃掉对方炮"], story_progress={"story_id": "wuzi-qi", "seg_idx": 2},
+        ),
+    )
+    assert d["seg_idx"] == 0
+    assert d["text"] == persona_storylines("laozhang")[0]["segments"][0]
+    assert d["story_id"] == "wuzi-qi"
+
+
+def test_quiet_fallback_without_storylines(monkeypatch):
+    """没有 storylines 时回退碎片 stories / 语气词库，不崩。"""
     from backend.app.core import narrative_driver as nd
 
-    monkeypatch.setattr(nd, "persona_stories", lambda p: [])
+    monkeypatch.setattr(nd, "persona_storylines", lambda p: [])
+    monkeypatch.setattr(nd, "persona_stories", lambda p: ["嗯，想起个事儿。"])
     for personality in ("laozhang", "xiaoya", "unknown"):
-        d = build_narrative(NarrativeType.QUIET, NarrativeContext(personality=personality))
+        d = build_narrative(NarrativeType.QUIET, NarrativeContext(personality=personality, move_index=10, quiet_seconds=99.0))
         assert isinstance(d, dict) and d["text"]
+        assert d["story_id"] is None
 
 
 def test_build_narrative_per_personality():
-    """按人格取词库/故事；未知人格回退老张。"""
+    """按人格取故事线；未知人格回退老张。"""
     for personality in ("laozhang", "xiaoya", "unknown"):
-        d = build_narrative(NarrativeType.QUIET, NarrativeContext(personality=personality))
+        d = build_narrative(NarrativeType.QUIET, NarrativeContext(personality=personality, move_index=10, quiet_seconds=99.0))
         assert isinstance(d, dict) and d["text"]
-
-
-def test_quiet_story_matches_events():
-    """故事按本回合事件关键词匹配：吃子时优先讲带'吃/赢'的回忆片段。"""
-    for personality in ("laozhang", "xiaoya"):
-        pool = []
-        for _ in range(60):
-            d = build_narrative(
-                NarrativeType.QUIET,
-                NarrativeContext(personality=personality, events=["玩家吃子：吃掉对方马"]),
-            )
-            assert d["text"]
-            pool.append(d["text"])
-        # 60 次中至少应出现一次贴合"吃"的片段（随机也可能全命中；这里保证可命中且合法）
-        assert any(("吃" in s or "赢" in s) for s in pool)
-
-
-def test_quiet_story_dedup_by_exclude():
-    """会话内去重：已讲过的片段不再重复（排除集优先）。"""
-    from backend.app.core.persona_store import stories as persona_stories
-
-    snips = persona_stories("laozhang")
-    told = set(snips)  # 全部讲过了 -> 允许回退到全量（不会无话可说）
-    d = build_narrative(
-        NarrativeType.QUIET,
-        NarrativeContext(personality="laozhang", exclude=told),
-    )
-    assert d["text"] in snips
-    # 只排除一条 -> 不会选到被排除的那条（除非它以外全是排除）
-    one = snips[0]
-    other = set(snips[1:])
-    seen = {build_narrative(NarrativeType.QUIET, NarrativeContext(personality="laozhang", exclude=other))["text"] for _ in range(30)}
-    assert one in seen or len(snips) == 1

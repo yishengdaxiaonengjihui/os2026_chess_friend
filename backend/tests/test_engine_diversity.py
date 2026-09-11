@@ -95,3 +95,32 @@ def test_opening_book_black_reply_to_central_cannon(engine_ready):
     assert "h0g2" in seen, "当头炮后应能走出标准屏风马(马8进7 护中)"
     assert "h2e2" in seen, "当头炮后应能走出顺手炮(炮8平5)——修复前坐标错误导致永远不出现"
     assert "b0a2" not in seen, "修复前把屏风马误写成往边角跳(b0->a2)不应再出现"
+
+
+def test_target_win_prob_keeps_moves_legal(engine_ready):
+    """动态胜率控制：targetUserWinProb 不破坏合法性/不崩。"""
+    fen = ccp.apply_move_to_fen(DEFAULT_FEN, "a6", "a5")
+    legal = _legal_from_to(fen, "black")
+    for _ in range(12):
+        res = ai_move(fen, color="black", difficulty=3, move_number=2, diversity=True, target_user_win_prob=0.5)
+        assert res["from_sq"] and res["to_sq"]
+        assert res["from_sq"] + res["to_sq"] in legal
+
+
+def test_target_win_prob_biases_selection(engine_ready):
+    """动态胜率控制：目标越偏向用户（0.99=让用户赢），选着平均评估分越低
+    （AI 主动走弱一点）；目标越偏向 AI（0.01），选着平均评估分越高。
+    用「黑车可免费吃红车」的战术局面放大分差。"""
+    fen = "r4k3/9/9/9/R8/9/9/9/9/4K4 b - - 0 1"
+    assert "a0a4" in {m["from"] + m["to"] for m in legal_moves(fen, "black")}
+    scores_high = []  # target=0.99（AI 放水，让用户赢）
+    scores_low = []   # target=0.01（AI 求最优，压用户）
+    for _ in range(20):
+        r_high = ai_move(fen, color="black", difficulty=3, move_number=8, diversity=True, target_user_win_prob=0.99)
+        r_low = ai_move(fen, color="black", difficulty=3, move_number=8, diversity=True, target_user_win_prob=0.01)
+        assert r_high["score"] is not None and r_low["score"] is not None
+        scores_high.append(r_high["score"])
+        scores_low.append(r_low["score"])
+    avg_high = sum(scores_high) / len(scores_high)
+    avg_low = sum(scores_low) / len(scores_low)
+    assert avg_high < avg_low, f"放水模式平均分应更低: high={avg_high:.1f} low={avg_low:.1f}"

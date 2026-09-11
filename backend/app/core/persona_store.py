@@ -51,6 +51,7 @@ def load_personas() -> dict[str, Any]:
                 "synopsis": p.get("synopsis") or default.get(pid, {}).get("synopsis", ""),
                 "story": p.get("story") or "",
                 "stories": p.get("stories") or [],
+                "storylines": p.get("storylines") or [],
                 "hooks": p.get("hooks") or [],
             }
         return merged
@@ -79,8 +80,17 @@ def story(personality: str) -> str:
 
 
 def stories(personality: str) -> list[str]:
-    """短回忆片段列表（供主动叙事随机挑一条讲）。"""
+    """短回忆片段列表（碎片兜底：无 storylines 时供主动叙事随机挑一条讲）。"""
     return persona_for(personality).get("stories") or []
+
+
+def storylines(personality: str) -> list[dict]:
+    """章节式故事线（4 段主线：源头→发展→高潮→收尾），供主动叙事按顺序连续讲。
+
+    每条结构：{id, name, tags: [关键词], segments: [段文本, ...]}。
+    事件关键词命中 tags/段文本时，从该故事线源头（第 0 段）开始讲。
+    """
+    return persona_for(personality).get("storylines") or []
 
 
 def story_prompt_block(personality: str) -> str:

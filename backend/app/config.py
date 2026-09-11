@@ -51,6 +51,10 @@ class Settings(BaseSettings):
     engine_diversity_prob: float = 0.45        # 中局走「加权候选」而非「深搜最优」的概率
     engine_diversity_opening: bool = True      # 开局阶段是否启用加权随机开局库
 
+    # ---- 动态胜率控制：中局候选选着时把"下一步用户胜率"拉向目标（0.5=势均力敌）----
+    # 仅作用于「加权候选」分支（diversity 路径）；深搜分支由 auto 档局内动态难度兜底。
+    engine_target_win_prob: float = 0.5        # 用户视角目标胜率；0~1，None/0 表示不启用
+
     # ---- 存储 ----
     sqlite_path: str = "data/chess_friend.db"
     chroma_dir: str = "data/chroma"

@@ -93,11 +93,16 @@ def ai_move(
     move_number: Optional[int] = None,
     use_opening_book: bool = True,
     diversity: Optional[bool] = None,
+    target_user_win_prob: Optional[float] = None,
 ) -> dict[str, Any]:
     """让引擎为指定方计算一手棋。
 
     问题8：引擎走法多样性 —— 开局库加权随机 + 中局候选加权随机，
     避免每次对局都是同一手棋。diversity=None 时跟随配置 engine_diversity。
+
+    动态胜率控制：target_user_win_prob 指定"下一步用户胜率"目标（0~1），
+    中局候选选着时把用户胜率拉向该目标（None 时跟随配置 engine_target_win_prob，
+    0 表示不启用）。仅作用于加权候选分支；深搜分支由 auto 档局内动态难度兜底。
 
     返回：{from_sq, to_sq, piece, new_fen, score, win_probability, ...}
     """
@@ -105,6 +110,10 @@ def ai_move(
     diff = difficulty or settings.engine_skill
     tms = time_ms if time_ms is not None else (settings.engine_time_ms or None)
     div = settings.engine_diversity if diversity is None else diversity
+    if target_user_win_prob is None:
+        tgt = settings.engine_target_win_prob
+    else:
+        tgt = target_user_win_prob
     res = _run(
         "ai_move",
         {
@@ -117,6 +126,7 @@ def ai_move(
             "diversity": div,
             "diversityProb": settings.engine_diversity_prob,
             "diversityOpening": settings.engine_diversity_opening,
+            "targetUserWinProb": tgt if tgt else None,
         },
     )
     mv = res.get("move")
