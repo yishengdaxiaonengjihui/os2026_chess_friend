@@ -86,8 +86,10 @@ function respond(obj) {
 }
 
 // ---------- 问题8：引擎走法多样性 ----------
-// 开局库：常见开局着法（加权随机）。moveNumber 0/1/2 分别对应红首着、黑应着、红三着。
+// 开局库：常见开局着法（加权随机）。moveNumber 1~5 对应黑方前 5 次应手（红方先行）。
 // 坐标 [rank, file]：rank0=黑方底部，rank9=红方底部。file0=a .. file8=i。
+// 注意：黑方行棋坐标按棋盘坐标书写（黑在 rank0 侧）。前 5 手用谱，之后纯引擎。
+const OPENING_BOOK_MAX_MOVE = 5; // 棋谱只管前 5 手（5 个半回合），之后走引擎深搜
 const OPENING_LINES = {
   red: [
     { w: 6, name: "中炮(炮二平五)", from: [7, 1], to: [7, 4] },
@@ -98,9 +100,12 @@ const OPENING_LINES = {
     { w: 2, name: "兵一进一(边兵)", from: [6, 0], to: [5, 0] },
   ],
   black: [
-    { w: 5, name: "屏风马(马8进7)", from: [0, 1], to: [2, 0] },
-    { w: 5, name: "顺手炮(炮8平5)", from: [0, 1], to: [0, 4] },
-    { w: 3, name: "跳边马(马8进9)", from: [0, 1], to: [1, 0] },
+    // 修正（原坐标有误）：屏风马应走 h0->g2（马8进7 护中），原 b0->a2 是往边角跳
+    { w: 5, name: "屏风马(马8进7)", from: [0, 7], to: [2, 6] },
+    // 修正（原从马位起步永远不合法）：顺手炮是 h2->e2（炮8平5），原 [0,1]->[0,4] 错
+    { w: 5, name: "顺手炮(炮8平5)", from: [2, 7], to: [2, 4] },
+    // 修正：跳边马在 h 侧 h0->i1（马8进9），原 [0,1]->[1,0] 错
+    { w: 3, name: "跳边马(马8进9)", from: [0, 7], to: [1, 8] },
     { w: 3, name: "上士(士4进5)", from: [0, 3], to: [1, 4] },
     { w: 2, name: "卒3进1", from: [3, 2], to: [4, 2] },
     { w: 2, name: "飞象(象3进5)", from: [0, 2], to: [2, 4] },
@@ -124,9 +129,9 @@ function legalMove(board, from, to) {
   );
 }
 
-// 开局加权随机：仅在开局阶段（moveNumber<=2）从候选开局库中按权重随机选合法着法。
+// 开局加权随机：仅开局阶段（moveNumber<=OPENING_BOOK_MAX_MOVE）从候选开局库中按权重随机选合法着法。
 function openingDiverseMove(board, color, moveNumber, rng) {
-  if (moveNumber > 2) return null;
+  if (moveNumber > OPENING_BOOK_MAX_MOVE) return null;
   const lines = color === "red" ? OPENING_LINES.red : OPENING_LINES.black;
   const legalCands = lines.filter((c) => legalMove(board, c.from, c.to));
   if (legalCands.length === 0) return null;
@@ -232,9 +237,9 @@ try {
     const diversityProb = typeof input.diversityProb === "number" ? input.diversityProb : 0.45;
     let mv = null;
 
-    // 问题8：开局库加权随机（仅开局阶段且开启多样性）
+    // 问题8：开局库加权随机（仅开局阶段且开启多样性，前 OPENING_BOOK_MAX_MOVE 手）
     if (diversity && input.diversityOpening !== false &&
-        typeof input.moveNumber === "number" && input.moveNumber <= 2) {
+        typeof input.moveNumber === "number" && input.moveNumber <= OPENING_BOOK_MAX_MOVE) {
       mv = openingDiverseMove(board, color, input.moveNumber, Math.random);
     }
 

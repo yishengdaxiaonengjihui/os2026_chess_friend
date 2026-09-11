@@ -143,6 +143,8 @@ async function main() {
   };
   await send("Runtime.enable");
   await send("Page.enable");
+  // 固定桌面视口：headless 默认 500x450 会命中移动端断点，棋盘高度百分比塌成 0（6px 边框）
+  await send("Emulation.setDeviceMetricsOverride", { width: 1400, height: 900, deviceScaleFactor: 1, mobile: false });
 
   const pageErrors = [];
   ws.addEventListener("message", (ev) => {
@@ -166,7 +168,9 @@ async function main() {
     check("后端新代码：响应含 result/game_over 字段", false, "ERR " + String(e && e.message || e));
   }
 
-  // ---- Phase 0: 页面就绪 + 登录 ----
+  // ---- Phase 0: 先导航到应用再操作（about:blank 无 localStorage 权限）----
+  await send("Page.navigate", { url: BASE + "/" });
+  await sleep(2500);
   const ready = await pollEval(`document.readyState === 'complete'`, 10000);
   check("页面加载完成", !!ready);
   await evalJs(`localStorage.setItem('cf_user', JSON.stringify({user_id:'cdp-e2e-' + Date.now(), nickname:'CDP测试'})); true;`);

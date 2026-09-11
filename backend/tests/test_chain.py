@@ -176,6 +176,75 @@ def test_checkmate_detected_win_directly(monkeypatch):
     routes._sessions.pop(g["game_id"], None)
 
 
+def test_game_over_forces_ending_speech(monkeypatch):
+    """结局必开口：将死终局绕过随机言语触发，数字人强制说祝贺收尾（LLM 生成）。"""
+    from backend.app.api import routes
+
+    monkeypatch.setattr(routes._settings, "speech_trigger_enabled", True)
+
+    def fake_chat(messages):
+        # 断言 Prompt 里注入了本局结果指令
+        joined = "\n".join(m.get("content", "") for m in messages)
+        assert "你获胜了" in joined
+        return {"speech_text": "你赢了！这盘真漂亮。", "emotion_tag": "喜悦", "action_tag": "applaud"}
+
+    monkeypatch.setattr(routes._llm, "chat", fake_chat)
+    g = client.post("/api/games", json={"user_id": "u-ending", "personality": "laozhang"}).json()
+    routes._sessions[g["game_id"]]["fen"] = "4k1R2/5p3/5N3/9/9/9/9/9/9/3K3R1 w - - 0 1"
+    r = client.post(
+        "/api/moves",
+        json={"game_id": g["game_id"], "user_id": "u-ending", "from_sq": "h9", "to_sq": "e9"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["result"] == "win" and body["game_over"] is True
+    # 结局必开口：avatar_command 有台词且是祝贺
+    assert body["avatar_command"] is not None
+    assert "赢" in body["avatar_command"]["speech_text"]
+    routes._sessions.pop(g["game_id"], None)
+
+
+def test_game_over_ending_fallback_when_llm_empty(monkeypatch):
+    """结局兜底：LLM 输出为空时回退人格固定收尾台词（保证'你赢了'必说）。"""
+    from backend.app.api import routes
+
+    monkeypatch.setattr(routes._settings, "speech_trigger_enabled", True)
+    monkeypatch.setattr(
+        routes._llm, "chat", lambda messages: {"speech_text": "", "emotion_tag": "平静", "action_tag": "idle"}
+    )
+    g = client.post("/api/games", json={"user_id": "u-ending2", "personality": "laozhang"}).json()
+    routes._sessions[g["game_id"]]["fen"] = "4k1R2/5p3/5N3/9/9/9/9/9/9/3K3R1 w - - 0 1"
+    r = client.post(
+        "/api/moves",
+        json={"game_id": g["game_id"], "user_id": "u-ending2", "from_sq": "h9", "to_sq": "e9"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["result"] == "win"
+    assert body["avatar_command"]["speech_text"] == routes._ENDING_LINES["laozhang"]["win"]
+    routes._sessions.pop(g["game_id"], None)
+
+
+def test_chat_echo_tail_ignored():
+    """录音尾音兜底：数字人刚说完（3s 内），识别文本是其台词后缀/子串 -> 判噪音丢弃。"""
+    import time as _time
+
+    from backend.app.api import routes
+
+    g = client.post("/api/games", json={"user_id": "u-echo", "personality": "laozhang"}).json()
+    sess = routes._sessions[g["game_id"]]
+    sess["last_ai_speech"] = "这盘下得有味儿"
+    sess["last_speech_ts"] = _time.time()
+    # 尾音后缀 -> 丢弃
+    r = client.post("/api/chat", json={"game_id": g["game_id"], "user_id": "u-echo", "text": "得有味儿"})
+    assert r.status_code == 200
+    assert r.json()["status"] == "noise_ignored"
+    # 正常输入不受影响
+    r2 = client.post("/api/chat", json={"game_id": g["game_id"], "user_id": "u-echo", "text": "今天天气不错"})
+    assert r2.json()["status"] == "ok"
+    routes._sessions.pop(g["game_id"], None)
+
+
 def test_profile_endpoint():
     r = client.get("/api/profiles/u-test-3")
     assert r.status_code == 200

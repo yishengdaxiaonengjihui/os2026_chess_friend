@@ -127,6 +127,13 @@ def _board_to_text(ctx: dict[str, Any]) -> str:
         lines.append("注意：当前处于将军状态。")
     if ctx.get("win_probability") is not None:
         lines.append(f"胜率预估：玩家 {ctx['win_probability']:.0%}")
+    if ctx.get("game_result"):
+        labels = {"win": "你获胜了", "lose": "你落败了", "draw": "和棋"}
+        label = labels.get(ctx["game_result"], ctx["game_result"])
+        lines.append(
+            f"本局已结束：{label}。请说一句有性格的收尾：获胜就真诚恭喜（直接说“你赢了”之类），"
+            "落败就安慰/认输，和棋就平心静气。不超过 15 字。"
+        )
     return "\n".join(lines) if lines else "（开局阶段）"
 
 

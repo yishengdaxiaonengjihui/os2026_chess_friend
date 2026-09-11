@@ -588,7 +588,7 @@
   // ---- 回声防护：数字人发声期间彻底关闭麦克风，播完(留余量)恢复 ----
   let srMuted = false; // 是否被数字人播放静音（非用户主动停止）
   let srUnmuteTimer = null; // 恢复识别延时（等 TTS 尾音/混响过去）
-  const SR_UNMUTE_DELAY = 1000; // 播完后再等 1s 恢复，杜绝尾音/混响回声
+  const SR_UNMUTE_DELAY = 1800; // 播完后再等 1.8s 恢复，杜绝尾音/混响回声（原 1s 偏短）
   function voiceMute() {
     srMuted = true;
     stopSilenceCheck();
@@ -623,7 +623,7 @@
   let subtitleHistory = [];
   let lastAiTs = 0; // 最近一句 AI 台词播放完成的时刻（isEchoText 时间窗用）
   const ECHO_SIM_THRESHOLD = 0.85;  // 相似度阈值（用户建议 0.85-0.92）
-  const ECHO_TIME_WINDOW = 2200;    // 时间窗 < 2.2s
+  const ECHO_TIME_WINDOW = 3000;    // 时间窗 < 3s（原 2.2s，尾音+识别延迟可能超窗）
   const SUBTITLE_MAX = 16;
 
   function recordSubtitle(text, src) {

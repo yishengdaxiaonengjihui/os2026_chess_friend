@@ -78,3 +78,20 @@ def test_diversity_black_reply_still_legal(engine_ready):
         assert res["from_sq"] + res["to_sq"] in legal
         seen.add(res["from_sq"] + res["to_sq"])
     assert len(seen) >= 1
+
+
+def test_opening_book_black_reply_to_central_cannon(engine_ready):
+    """开局棋谱坐标修正：红当头炮(炮二平五)后，黑方应着必须含标准 屏风马(h0->g2)
+    与 顺手炮(h2->e2)，且修复前那种往边角的怪跳(b0->a2)不再出现。"""
+    after_red = ccp.toggle_side(ccp.apply_move_to_fen(DEFAULT_FEN, "b7", "e7"))  # 红 炮二平五
+    legal = _legal_from_to(after_red, "black")
+    seen = set()
+    for _ in range(40):
+        res = ai_move(after_red, color="black", difficulty=2, move_number=1, diversity=True)
+        assert res["from_sq"] and res["to_sq"]
+        mv = res["from_sq"] + res["to_sq"]
+        assert mv in legal
+        seen.add(mv)
+    assert "h0g2" in seen, "当头炮后应能走出标准屏风马(马8进7 护中)"
+    assert "h2e2" in seen, "当头炮后应能走出顺手炮(炮8平5)——修复前坐标错误导致永远不出现"
+    assert "b0a2" not in seen, "修复前把屏风马误写成往边角跳(b0->a2)不应再出现"

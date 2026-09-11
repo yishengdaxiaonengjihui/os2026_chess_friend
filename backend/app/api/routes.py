@@ -91,6 +91,21 @@ _sessions: dict[str, dict] = {}
 _llm = LLMClient()
 _settings = get_settings()
 
+# 问题：结局必开口 —— LLM 输出为空/失败时的人格固定收尾台词（赢/输/和）
+_ENDING_LINES = {
+    "laozhang": {
+        "win": "嘿，你赢了！这盘杀得真漂亮，我输得心服口服。",
+        "lose": "这盘我赢了，承让承让。再来一盘，我可就认真了。",
+        "draw": "困毙，和棋。谁也奈何不了谁，咱歇口气再开一盘。",
+    },
+    "xiaoya": {
+        "win": "你赢了，下得真好！这盘我心服口服呢。",
+        "lose": "这盘我赢了……承让啦，我们再来一盘吧。",
+        "draw": "困毙了，和棋呢。咱们慢慢来，再下一盘吧。",
+    },
+}
+_ENDING_EMOTION = {"win": "喜悦", "lose": "惋惜", "draw": "平静"}
+
 
 def _new_session(
     user_id: str,
@@ -130,6 +145,7 @@ def _new_session(
         "memory": memory,
         "dispatcher": AvatarDispatcher(),
         "ai_opening": None,  # 执黑时 AI(红) 的首着
+        "told_stories": set(),  # 主动叙事已讲过的片段（会话内去重）
     }
     # 数字人状态广播 -> 对局 WS 连接
     sess["dispatcher"].set_broadcaster(
@@ -365,6 +381,7 @@ def make_move(req: MoveRequest) -> MoveResponse:
     # 7) 对局终结判定 -> 画像 + 长期记忆落盘
     result = _result_from_engine(user_fen, ai_new_fen, engine_res, user_color)
     if result is not None:
+        ctx["game_result"] = result  # 结局指令注入 Prompt（结局必开口）
         sess["game_over"] = True
         finalize_game(stats, result)
         summary = build_game_summary(stats, result)
@@ -398,6 +415,8 @@ def make_move(req: MoveRequest) -> MoveResponse:
             last_speech_ts=sess.get("last_speech_ts"),
             silent_streak=sess.get("silent_streak", 0),
         )
+    if result is not None:
+        speak_now = True  # 结局必开口：将死/困毙等终局绕过随机触发，必须说收尾
     if speak_now:
         messages = build_prompt(
             profile=profile,
@@ -410,7 +429,16 @@ def make_move(req: MoveRequest) -> MoveResponse:
         llm_out = _llm.chat(messages)
         # 问题5：第四层正则兜底，彻底清除坐标/记谱等机械话术
         llm_out["speech_text"] = sanitize_speech(llm_out["speech_text"])
+        # 结局兜底：LLM 输出为空时用人格固定收尾台词（保证"你赢了"等必说）
+        if result is not None and not (llm_out.get("speech_text") or "").strip():
+            endings = _ENDING_LINES.get(sess["personality"], _ENDING_LINES["laozhang"])
+            llm_out = {
+                "speech_text": endings.get(result, endings["draw"]),
+                "emotion_tag": _ENDING_EMOTION.get(result, "平静"),
+                "action_tag": "idle",
+            }
         sess["memory"].remember_turn("assistant", llm_out["speech_text"])
+        sess["last_ai_speech"] = llm_out["speech_text"]  # 供 /api/chat 回声兜底
         # 11) 具身指令分发
         cmd = PerformanceCommand(
             speech_text=llm_out["speech_text"],
@@ -436,20 +464,29 @@ def make_move(req: MoveRequest) -> MoveResponse:
         quiet_seconds=(time.time() - sess["last_speech_ts"]) if sess.get("last_speech_ts") else 999.0,
         has_event=bool(events),
         personality=sess["personality"],
+        events=events,
+        exclude=sess.get("told_stories", set()),
     )
     n_type = narrate(n_ctx)
     narrative_text = ""
+    narr_emotion, narr_action = "平静", "idle"
     last_narr = sess.get("last_narrative_move", 0)
     # 限频：距上次主动叙事至少 NARRATIVE_INTERVAL_MOVES 手；本步 LLM 已说话则不叠
     if not speak_now and (sess["move_index"] - last_narr) >= NARRATIVE_INTERVAL_MOVES:
-        narrative_text = build_narrative(n_type, n_ctx)
+        narr = build_narrative(n_type, n_ctx)
+        if narr and narr.get("text"):
+            narrative_text = narr["text"]
+            narr_emotion = narr.get("emotion_tag", "平静")
+            narr_action = narr.get("action_tag", "idle")
     if narrative_text:
         sess["memory"].remember_turn("assistant", narrative_text)
         sess["last_narrative_move"] = sess["move_index"]
+        sess["last_ai_speech"] = narrative_text  # 供 /api/chat 回声兜底
+        sess.setdefault("told_stories", set()).add(narrative_text)  # 会话内去重
         # 主动叙事台词真正交给数字人播报（此前只入记忆、不开口）。
         # 与 LLM 点评走同一条具身指令链路：play_sync 入队 -> 前端 avatarAdapter.speak。
         avatar_cmd = sess["dispatcher"].play_sync(
-            PerformanceCommand(speech_text=narrative_text, emotion_tag="平静", action_tag="idle")
+            PerformanceCommand(speech_text=narrative_text, emotion_tag=narr_emotion, action_tag=narr_action)
         )
         # 叙事也算一次开口：更新发言时间戳、重置静默计数，避免与"连续静默保底"打架
         sess["last_speech_ts"] = time.time()
@@ -659,6 +696,14 @@ def chat(req: ChatRequest) -> dict:
     sess = _sessions.get(req.game_id)
     if not sess:
         raise HTTPException(status_code=404, detail="game_id 不存在")
+    # 回声兜底：数字人刚说完（3s 内），尾音被录进来——识别文本是最近一句
+    # AI 台词的后缀/子串（>=3 字）即当作噪音丢弃，不进记忆不触发回复。
+    ai_last = sess.get("last_ai_speech") or ""
+    ts_last = sess.get("last_speech_ts") or 0
+    t_text = (req.text or "").strip()
+    if len(t_text) >= 3 and ai_last and (time.time() - ts_last) <= 3.0:
+        if ai_last.endswith(t_text) or (len(t_text) >= 4 and t_text in ai_last):
+            return {"status": "noise_ignored", "reason": "echo_tail", "reply": None}
     # 问题3：噪音判定
     if is_noise(req.text):
         return {"status": "noise_ignored", "reason": "noise", "reply": None}
@@ -696,6 +741,7 @@ def chat(req: ChatRequest) -> dict:
         llm_out = _llm.chat(messages)
         llm_out["speech_text"] = sanitize_speech(llm_out["speech_text"])
         sess["memory"].remember_turn("assistant", llm_out["speech_text"])
+        sess["last_ai_speech"] = llm_out["speech_text"]  # 供回声兜底
         sess["last_speech_ts"] = time.time()
         sess["silent_streak"] = 0
         return {
