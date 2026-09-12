@@ -32,6 +32,8 @@ from ..core.chess_engine import ai_move, legal_moves, position_status, score_to_
 from ..core.term_filter import sanitize_speech
 from ..core.input_filter import InputFilter, is_noise
 from ..core.narrative_driver import NARRATIVE_INTERVAL_MOVES, NarrativeContext, build_narrative, narrate
+
+_TOLD_WINDOW = 6  # 最近已讲叙事文本窗口（去重防同一句紧挨着重讲两遍）
 from ..core.memory_manager import detect_personal_info
 from ..core.speech_trigger_decider import classify_strength, should_speak
 from ..core.model_registry import get_runtime_model, list_models, set_runtime_model
@@ -145,7 +147,7 @@ def _new_session(
         "memory": memory,
         "dispatcher": AvatarDispatcher(),
         "ai_opening": None,  # 执黑时 AI(红) 的首着
-        "told_stories": set(),  # 主动叙事已讲过的片段（会话内去重，碎片兜底用）
+        "told_stories": [],  # 最近已讲的叙事文本（有界窗口，去重防"同一句紧挨着重讲"）
         # 动态胜率控制（auto 档局内自适应）
         "diff_current": None,   # 局内动态难度（None=未初始化，用画像初始值）
         "win_ema": None,        # 用户胜率 EMA 平滑值
@@ -518,7 +520,7 @@ def make_move(req: MoveRequest) -> MoveResponse:
         has_event=bool(events),
         personality=sess["personality"],
         events=events,
-        exclude=sess.get("told_stories", set()),
+        exclude=sess.get("told_stories", []),
         story_progress=sess.get("story_state") or None,
     )
     n_type = narrate(n_ctx)
@@ -547,7 +549,11 @@ def make_move(req: MoveRequest) -> MoveResponse:
         sess["memory"].remember_turn("assistant", narrative_text)
         sess["last_narrative_move"] = sess["move_index"]
         sess["last_ai_speech"] = narrative_text  # 供 /api/chat 回声兜底
-        sess.setdefault("told_stories", set()).add(narrative_text)  # 会话内去重
+        # 最近已讲窗口（去重防同一句紧挨着重讲）：保留最近 6 条
+        told = sess.setdefault("told_stories", [])
+        told.append(narrative_text)
+        if len(told) > _TOLD_WINDOW:
+            del told[:-_TOLD_WINDOW]
         # 主动叙事台词真正交给数字人播报（此前只入记忆、不开口）。
         # 与 LLM 点评走同一条具身指令链路：play_sync 入队 -> 前端 avatarAdapter.speak。
         avatar_cmd = sess["dispatcher"].play_sync(

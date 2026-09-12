@@ -110,12 +110,12 @@ def test_target_win_prob_keeps_moves_legal(engine_ready):
 def test_target_win_prob_biases_selection(engine_ready):
     """动态胜率控制：目标越偏向用户（0.99=让用户赢），选着平均评估分越低
     （AI 主动走弱一点）；目标越偏向 AI（0.01），选着平均评估分越高。
-    用「黑车可免费吃红车」的战术局面放大分差。"""
+    用「黑车可免费吃红车」的战术局面放大分差（该局面着法分确定：吃=109 / 开发=29 / 其余=-1）。"""
     fen = "r4k3/9/9/9/R8/9/9/9/9/4K4 b - - 0 1"
     assert "a0a4" in {m["from"] + m["to"] for m in legal_moves(fen, "black")}
     scores_high = []  # target=0.99（AI 放水，让用户赢）
     scores_low = []   # target=0.01（AI 求最优，压用户）
-    for _ in range(20):
+    for _ in range(40):
         r_high = ai_move(fen, color="black", difficulty=3, move_number=8, diversity=True, target_user_win_prob=0.99)
         r_low = ai_move(fen, color="black", difficulty=3, move_number=8, diversity=True, target_user_win_prob=0.01)
         assert r_high["score"] is not None and r_low["score"] is not None

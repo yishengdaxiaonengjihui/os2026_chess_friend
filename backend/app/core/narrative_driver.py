@@ -122,32 +122,59 @@ def _pick_storyline(ctx: NarrativeContext) -> tuple[dict | None, int]:
     """故事线选择：返回 (storyline, seg_idx)。
 
     优先级：
-    1. 本回合事件关键词命中某故事线 -> 从该线**源头（第 0 段）**开始讲（先抛源头）；
+    1. 本回合事件关键词命中某故事线：
+       - 正在讲这条线 -> **继续当前进度段**（连续性优先，不因事件重讲）；
+       - 没在讲 / 刚讲完 -> 从该线**源头（第 0 段）**开始讲（先抛源头）；
     2. 否则继续当前进度（story_progress）的下一段；
     3. 当前故事讲完 / 无进度 -> 随机换一条新故事线从源头开始。
     """
     lines = persona_storylines(ctx.personality)
     if not lines:
         return None, 0
+    prog = ctx.story_progress or {}
+    cur_id = prog.get("story_id")
+    cur_seg = int(prog.get("seg_idx") or 0)
     keys = _event_keys(ctx.events or [])
     if keys:
         for line in lines:
             blob = "，".join(line.get("segments") or []) + "，" + "，".join(line.get("tags") or [])
             if any(k in blob for k in keys):
-                return line, 0  # 事件命中 -> 从源头讲
-    prog = ctx.story_progress or {}
-    cur = prog.get("story_id")
-    if cur:
+                if line.get("id") == cur_id:
+                    n = len(line.get("segments") or [])
+                    if 0 <= cur_seg < n:
+                        return line, cur_seg  # 正在讲这条线：接着讲，不重讲
+                return line, 0  # 没在讲：从源头抛起
+    if cur_id:
         for line in lines:
-            if line.get("id") == cur:
+            if line.get("id") == cur_id:
                 n = len(line.get("segments") or [])
-                seg = int(prog.get("seg_idx") or 0)
-                if 0 <= seg < n:
-                    return line, seg  # 继续下一段（seg_idx 即下一段下标）
+                if 0 <= cur_seg < n:
+                    return line, cur_seg  # 继续下一段（seg_idx 即下一段下标）
                 break  # 讲完 -> 换新故事
     # 无进度 / 已讲完 -> 随机挑一条新故事线从源头开始
     line = random.choice(lines)
     return line, 0
+
+
+def _dedup_segment(lines: list[dict], line: dict, seg: int, told: list[str]) -> tuple[dict, int]:
+    """最近已讲窗口去重：选中的段若刚讲过，优先同线后续段，其次换线源头，
+    全部冲突才允许重复（避免同一句台词紧挨着重讲两遍）。"""
+    if not told or line is None:
+        return line, seg
+    segs = line.get("segments") or []
+    if not segs or segs[seg] not in told:
+        return line, seg
+    n = len(segs)
+    for i in range(seg + 1, n):  # 同线后续段
+        if segs[i] not in told:
+            return line, i
+    for other in lines:  # 换线源头
+        if other is line:
+            continue
+        osegs = other.get("segments") or []
+        if osegs and osegs[0] not in told:
+            return other, 0
+    return line, seg  # 全讲过 -> 允许重复
 
 
 def narrate(ctx: NarrativeContext, now: float | None = None) -> NarrativeType:
@@ -183,6 +210,9 @@ def build_narrative(n_type: NarrativeType, ctx: NarrativeContext) -> dict[str, s
     if n_type == NarrativeType.QUIET:
         line, seg = _pick_storyline(ctx)
         if line is not None:
+            lines = persona_storylines(ctx.personality)
+            # 最近已讲窗口去重：避免同一句台词紧挨着重讲两遍
+            line, seg = _dedup_segment(lines, line, seg, list(ctx.exclude or []))
             segs = line.get("segments") or []
             if segs and 0 <= seg < len(segs):
                 text = segs[seg]

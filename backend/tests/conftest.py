@@ -25,6 +25,21 @@ def pytest_configure(config):
     config._tmp_root_override = tmp_root
 
 
+@pytest.fixture(scope="session", autouse=True)
+def clean_test_db():
+    """每轮测试前清空测试库：防止跨轮残留画像/故事线进度污染（导致偶发失败）。"""
+    raw = os.environ.get("SQLITE_PATH", "data/test_chess_friend.db")
+    db = Path(raw) if Path(raw).is_absolute() else ROOT / raw
+    for suffix in ("", "-wal", "-shm"):
+        p = Path(str(db) + suffix)
+        if p.exists():
+            try:
+                p.unlink()
+            except OSError:
+                pass
+    yield
+
+
 @pytest.fixture
 def tmp_path(request):
     """覆盖内置 tmp_path：返回工作区内唯一子目录（绕过系统临时目录沙箱限制）。"""

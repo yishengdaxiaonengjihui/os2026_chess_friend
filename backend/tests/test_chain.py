@@ -289,30 +289,40 @@ def test_story_progress_persisted_cross_game():
     import backend.app.api.routes as routes_mod
     from backend.app.api import routes
 
-    g = client.post("/api/games", json={"user_id": "u-story", "personality": "laozhang"}).json()
-    sess = routes._sessions[g["game_id"]]
     # 让叙事可触发：开言语触发但 should_speak 恒 False（否则每手 LLM 说话会压掉叙事）
     orig = routes_mod.should_speak
     routes_mod.should_speak = lambda **kw: False
     routes_mod._settings.speech_trigger_enabled = True
+    # 清掉上一轮残留的故事线进度（防止"开局即续讲到收尾段 done 清空"的偶发）
+    from backend.app.core.memory_manager import ProfileStore
+
+    ProfileStore().reset("u-story")
+    g = None
+    sess = None
     try:
-        fen = sess["fen"]
-        moves = 0
-        while moves < 24 and not sess.get("last_narrative_move", 0):
-            legal = client.get("/api/moves/legal", params={"fen": fen, "color": "red"}).json()["moves"]
-            assert legal, f"第 {moves} 手无合法着"
-            mv = legal[0]
-            r = client.post(
-                "/api/moves",
-                json={"game_id": g["game_id"], "user_id": "u-story", "from_sq": mv["from"], "to_sq": mv["to"]},
-            )
-            assert r.status_code == 200
-            body = r.json()
-            fen = body["new_fen"]
-            moves += 1
-            if body["game_over"]:
-                break
-        assert moves < 24, "24 手内应触发至少一次主动叙事"
+        # 随机对局可能提前终局（叙事需在第 6 手后才有机会触发）——最多重试 3 局
+        for attempt in range(3):
+            g = client.post("/api/games", json={"user_id": "u-story", "personality": "laozhang"}).json()
+            sess = routes._sessions[g["game_id"]]
+            fen = sess["fen"]
+            moves = 0
+            while moves < 24 and not sess.get("last_narrative_move", 0):
+                legal = client.get("/api/moves/legal", params={"fen": fen, "color": "red"}).json()["moves"]
+                assert legal, f"第 {moves} 手无合法着"
+                mv = legal[0]
+                r = client.post(
+                    "/api/moves",
+                    json={"game_id": g["game_id"], "user_id": "u-story", "from_sq": mv["from"], "to_sq": mv["to"]},
+                )
+                assert r.status_code == 200
+                body = r.json()
+                fen = body["new_fen"]
+                moves += 1
+                if body["game_over"]:
+                    break
+            if sess.get("last_narrative_move", 0):
+                break  # 已触发叙事
+        assert sess is not None and sess.get("last_narrative_move", 0), "24 手/3 局内应触发至少一次主动叙事"
     finally:
         routes_mod.should_speak = orig
         routes_mod._settings.speech_trigger_enabled = False

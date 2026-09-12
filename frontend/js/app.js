@@ -841,7 +841,7 @@
     state.fen = optimistic;
     state.board.movePiece(fromSq, toSq, optimistic);
     legalCache = {};
-    setStatus("你已落子，老张想想怎么走…");
+    setStatus("你已落子，" + (AVATARS[currentPersonality()] || AVATARS.laozhang)[1] + "想想怎么走…");
     try {
       const resp = await API.makeMove(state.game.game_id, state.game.user_id, fromSq, toSq);
       // 步骤2：真人感思考停顿 —— 拿到 AI 应手后不立即落子，先"琢磨"一会儿

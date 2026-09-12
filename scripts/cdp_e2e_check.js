@@ -179,15 +179,25 @@ async function main() {
   const inApp = await pollEval(`!document.getElementById('app-view').classList.contains('hidden') && !!document.getElementById('user-label').textContent`, 10000);
   check("登录进入主界面", !!inApp, "user=" + (await evalJs(`document.getElementById('user-label').textContent`)));
 
+  // ---- 人格回归：用小雅开局（验证状态栏/头像不再硬编码"老张"）----
+  await evalJs(`document.getElementById('set-personality').value = 'xiaoya'; true;`);
+
   // ---- 开始对局 ----
   await evalJs(`document.getElementById('btn-start-game').click(); true;`);
   const roomShown = await pollEval(`!document.getElementById('game-layout').classList.contains('hidden') && document.querySelectorAll('.piece').length >= 10`, 15000);
   check("开始对局进入对局室(棋盘棋子>=10)", !!roomShown, "pieces=" + (await evalJs(`document.querySelectorAll('.piece').length`)));
+  const nameShown = await evalJs(`document.getElementById('avatar-name').textContent`);
+  check("人格名随选择切换为小雅", nameShown === "小雅", "avatar-name=" + nameShown);
 
   // ---- Phase A: 真实走一步（新代码不破坏正常对局）----
   const selA = await clickPieceWithTarget(6);
   check("选子后高亮合法着法", !!selA, "targets=" + (await evalJs(`document.querySelectorAll('.cell-dot').length`)));
   await clickFirstTarget();
+  // 落子瞬间状态栏应显示当前人格名（回归：不再硬编码"老张想想怎么走"）
+  const thinkingStatus = await pollEval(`document.getElementById('status').textContent.indexOf('想想') >= 0`, 6000);
+  const stText = await evalJs(`document.getElementById('status').textContent`);
+  check("落子瞬间状态栏用当前人格名(小雅,非硬编码'老张')",
+    !!thinkingStatus && stText.indexOf("小雅") >= 0 && stText.indexOf("老张") < 0, "status=" + stText);
   // 等待真实落子完成：状态回到"该你走棋"或对局结束
   const settledA = await pollEval(`(function(){ var s=document.getElementById('status').textContent; return (s.indexOf('该你走棋')>=0 || s.indexOf('对局结束')>=0) ? s : ''; })()`, 20000);
   check("真实落子完成（AI 已应手）", !!settledA, "status=" + settledA);

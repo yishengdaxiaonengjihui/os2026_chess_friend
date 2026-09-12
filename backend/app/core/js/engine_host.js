@@ -181,13 +181,13 @@ function midgameDiverseMove(board, color, difficulty, rng, targetUserWinProb) {
     return { from: candidates[0].m.from, to: candidates[0].m.to, score: best, candidates: topN };
   }
   // 权重：与最优分差越近权重越高（softmax 风格，温差=120）；
-  // 目标胜率开启时，再乘"目标接近度"权重（|userWin - target| 越小权重越高，温差=0.12）
+  // 目标胜率开启时，再乘"目标接近度"权重（|userWin - target| 越小权重越高，温差=0.08）
   const temp = 120;
   const weights = candidates.map((c) => {
     let w = Math.exp((c.s - best) / temp);
     if (target !== null) {
       const uw = userWinOf(c.s);
-      w *= Math.exp(-Math.abs(uw - target) / 0.12);
+      w *= Math.exp(-Math.abs(uw - target) / 0.08);
     }
     return w;
   });

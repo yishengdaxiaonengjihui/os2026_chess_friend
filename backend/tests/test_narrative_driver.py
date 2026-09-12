@@ -90,8 +90,22 @@ def test_storyline_advances_in_order():
     assert d2["seg_idx"] == 0
 
 
-def test_event_hit_starts_from_source():
-    """事件命中故事线 -> 从该线源头（第 0 段）讲（先抛源头），覆盖进行中的进度。"""
+def test_event_hit_starts_from_source_when_not_telling():
+    """事件命中且没在讲这条线 -> 从该线源头（第 0 段）讲（先抛源头）。"""
+    d = build_narrative(
+        NarrativeType.QUIET,
+        NarrativeContext(
+            personality="laozhang", move_index=10, quiet_seconds=99.0,
+            events=["玩家吃子：吃掉对方炮"], story_progress={"story_id": "other-line", "seg_idx": 1},
+        ),
+    )
+    assert d["seg_idx"] == 0
+    assert d["text"] == persona_storylines("laozhang")[0]["segments"][0]
+    assert d["story_id"] == "wuzi-qi"
+
+
+def test_event_hit_continues_current_line():
+    """事件命中但正在讲这条线 -> 继续当前进度段（连续性优先，不因事件重讲）。"""
     d = build_narrative(
         NarrativeType.QUIET,
         NarrativeContext(
@@ -99,9 +113,24 @@ def test_event_hit_starts_from_source():
             events=["玩家吃子：吃掉对方炮"], story_progress={"story_id": "wuzi-qi", "seg_idx": 2},
         ),
     )
-    assert d["seg_idx"] == 0
-    assert d["text"] == persona_storylines("laozhang")[0]["segments"][0]
+    assert d["seg_idx"] == 2
+    assert d["text"] == persona_storylines("laozhang")[0]["segments"][2]
     assert d["story_id"] == "wuzi-qi"
+
+
+def test_recently_told_dedup_window():
+    """最近已讲窗口去重：选中的段若刚讲过，换同线后续段，避免同一句紧挨着重讲。"""
+    # 无进度 -> 源头段；把源头段放入已讲窗口 -> 应换到第 1 段
+    d = build_narrative(
+        NarrativeType.QUIET,
+        NarrativeContext(
+            personality="laozhang", move_index=10, quiet_seconds=99.0,
+            story_progress={"story_id": "wuzi-qi", "seg_idx": 0},
+            exclude=[persona_storylines("laozhang")[0]["segments"][0]],
+        ),
+    )
+    assert d["seg_idx"] == 1, "源头段刚讲过应换到下一段"
+    assert d["text"] == persona_storylines("laozhang")[0]["segments"][1]
 
 
 def test_quiet_fallback_without_storylines(monkeypatch):
