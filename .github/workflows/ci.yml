@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node.js (引擎运行时)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: 安装依赖
+        run: pip install -r requirements.txt
+
+      - name: 准备测试数据目录
+        run: mkdir -p data
+
+      - name: pytest 单测（119 项）
+        run: python -m pytest backend/tests -q --no-header -p no:cacheprovider
+
+      - name: 一键自检（9 项；后端离线时健康项自动 SKIP）
+        run: python scripts/self_check.py
