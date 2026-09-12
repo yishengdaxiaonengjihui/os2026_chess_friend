@@ -3,6 +3,8 @@
 > 2026 上海开源软件应用创新大赛（OS2026）· 开源 AI 工具赛道 · 魔珐星云企业命题
 > 让 AI「活」起来：基于魔珐星云具身交互智能的创新应用
 
+[![CI](https://github.com/yishengdaxiaonengjihui/os2026_chess_friend/actions/workflows/ci.yml/badge.svg)](https://github.com/yishengdaxiaonengjihui/os2026_chess_friend/actions/workflows/ci.yml)
+
 面向**居家独居老年群体**的 AI 数字人象棋棋友：真实中国象棋博弈 + 长期记忆 + 结构化用户画像 + 具身数字人表情/语音/动作反馈，打造一位「记得你棋风和喜好」的老朋友式棋友。
 
 - 不是无脑哄人的玩具 Bot：复用成熟开源象棋引擎（α-β 剪枝），具备真实博弈能力
