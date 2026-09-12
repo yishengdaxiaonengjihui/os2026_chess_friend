@@ -1,11 +1,17 @@
+# OS2026 适老化数字人中国象棋棋友 —— 一键部署
+# 用法：cp .env.example .env（填真实密钥）→ docker compose up -d --build
+# 访问 http://localhost:8000 （容器内 8000；本机开发后端用 8010，见 README）
 services:
   backend:
-    build: .
+    build:
+      context: .
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-}   # 国内构建加速（可选，来自 .env）
     container_name: chess-friend-backend
     ports:
       - "8000:8000"
     env_file:
       - .env
     volumes:
-      - ./data:/app/data
+      - ./data:/app/data   # 画像/棋谱/记忆落盘（本机 data/ 目录，随交付包一起带走）
     restart: unless-stopped

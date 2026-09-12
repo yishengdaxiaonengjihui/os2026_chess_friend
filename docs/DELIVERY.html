@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>OS2026 适老化数字人中国象棋棋友 · 交付文档</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif;
+    font-size: 10.5pt; line-height: 1.65; color: #2b2b2b; margin: 0;
+  }
+  h1 { font-size: 20pt; color: #8b1a1a; border-bottom: 3px solid #c9a86a; padding-bottom: 8px; margin: 0 0 4px; }
+  h2 { font-size: 14pt; color: #8b1a1a; margin: 22px 0 8px; border-left: 5px solid #c9a86a; padding-left: 8px; }
+  h3 { font-size: 11.5pt; color: #5a3a12; margin: 14px 0 6px; }
+  p { margin: 6px 0; }
+  .subtitle { color: #7a5a2a; font-size: 11pt; margin-bottom: 16px; }
+  table { border-collapse: collapse; width: 100%; margin: 8px 0; font-size: 9.5pt; }
+  th, td { border: 1px solid #d8c9a8; padding: 5px 7px; text-align: left; vertical-align: top; }
+  th { background: #f4ead6; color: #5a3a12; }
+  tr:nth-child(even) td { background: #faf6ec; }
+  pre {
+    background: #2f2a22; color: #f0e6d2; padding: 10px 12px; border-radius: 6px;
+    font-family: Consolas, "Courier New", monospace; font-size: 9pt; line-height: 1.5;
+    white-space: pre; overflow-x: hidden;
+  }
+  code { font-family: Consolas, "Courier New", monospace; font-size: 9pt; background: #f4ead6; padding: 0 3px; border-radius: 3px; }
+  pre code { background: none; padding: 0; }
+  blockquote { border-left: 4px solid #c9a86a; margin: 10px 0; padding: 4px 12px; color: #5a5a5a; background: #faf6ec; }
+  ul, ol { margin: 6px 0 6px 22px; padding: 0; }
+  li { margin: 3px 0; }
+  .footer { margin-top: 26px; padding-top: 8px; border-top: 1px solid #d8c9a8; color: #8a8a8a; font-size: 9pt; text-align: center; }
+  .badge { display: inline-block; background: #8b1a1a; color: #fff; border-radius: 4px; padding: 1px 8px; font-size: 9pt; margin-right: 6px; }
+  .pagebreak { page-break-before: always; }
+</style>
+</head>
+<body>
+
+<h1>OS2026 适老化数字人中国象棋棋友</h1>
+<div class="subtitle">交付文档 · 提交：OS2026 开源大赛 · 仓库：os2026_chess_friend<br>一份"懂棋、会唠、陪得住"的适老化数字人象棋棋友</div>
+
+<h2>一、项目简介与定位</h2>
+<p>面向老年棋友的<b>数字人中国象棋陪练</b>：真人感数字人（魔珐星云 XmovAvatar 3D 形象 + TTS + 口型 + 情绪 + 关键动作）既是棋手、也是棋友，陪用户下棋、唠家常、讲往事。</p>
+<ul>
+  <li><b>懂棋</b>：复用 xiangqi logic.js 引擎（α-β 剪枝 + 置换表 + 开局库 + 胜率评估），自研 FEN 对接层与走法多样性/动态难度，让对局"势均力敌"又有真人味；</li>
+  <li><b>会唠</b>：棋局事件驱动 LLM 人格台词（老张/小雅双人格），说话频率压到真人水平，语音对话闭环（含回声双保险）；</li>
+  <li><b>陪得住</b>：分层记忆（本局会话 + 长期记忆 + SQLite 用户画像），数字人记得用户棋风、习惯与说过的话；章节式故事线"先抛源头、一点一点往后讲"，跨局续讲。</li>
+</ul>
+
+<h2>二、功能总览</h2>
+<table>
+  <tr><th style="width:16%">模块</th><th>能力</th></tr>
+  <tr><td>象棋博弈</td><td>引擎对弈（α-β + 置换表 + 开局库 + 胜率评估）、合法着高亮、绝杀/困毙精确判赢、送吃保护</td></tr>
+  <tr><td>动态胜率控制</td><td>auto 档局内按 EMA 胜率每 2 手调难度（范围 [1,6]，死区 ±5%）；引擎中局候选按"目标胜率 0.5"选着（被压制 ≤35% 走最优不放水）→ 对局稳定在势均力敌</td></tr>
+  <tr><td>走法多样性</td><td>开局库加权随机（前 5 手，坐标已修正）+ 中局候选胜率加权随机，避免每局同一手</td></tr>
+  <tr><td>数字人</td><td>XmovAvatar 3D：TTS/口型/情绪/关键动作/语音打断（barge-in）；老张/小雅双 AppId 双形象双音色；Web Speech 朗读降级</td></tr>
+  <tr><td>人格台词</td><td>棋局事件（将军/吃子/胜负/优劣）→ LLM 人格台词 + 情绪 + 动作；口语库（嘟囔/口头禅/长考搭话）；去"你/您"机械腔</td></tr>
+  <tr><td>主动叙事</td><td>开场问候、静默找话；章节式故事线（老张《无字棋子》/小雅《棋盘住进脑子》各 4 段：源头→发展→高潮→收尾），事件命中/顺序推进/讲完换新，最近窗口防重复，跨局续讲存画像</td></tr>
+  <tr><td>记忆与画像</td><td>短期会话 + 长期记忆（mem0 可选，未装降级 SQLite 子串召回）+ 画像（棋风/棋力/开局/战绩 diff 更新落盘）</td></tr>
+  <tr><td>语音闭环</td><td>Web Speech 识别 → 转写 → LLM 回复 → 数字人插播；噪音过滤；尾音回声双保险（前端恢复延时 1.8s + 3s 回声窗，后端台词后缀/子串判噪）</td></tr>
+  <tr><td>对局管理</td><td>悔棋（同步回滚）、和棋（按胜率判断）、认输、棋谱自动落库（胜/负/和/未结束 + 加精 + 整页回放）</td></tr>
+  <tr><td>用户体系</td><td>多账号登录切换，各账号棋谱/画像/记忆隔离；通用设置（改名/删除/切换模型/闲聊三档）</td></tr>
+  <tr><td>适老化</td><td>暖色木纹大字高对比、整局锁单屏、AI 真人感思考停顿（0.8~1.8s）、移动轨迹淡出</td></tr>
+</table>
+
+<h2>三、系统架构</h2>
+<pre>
+┌──────────────────────────────────────────────────────────┐
+│ 前端（vanilla JS，FastAPI 同源 serve）                      │
+│  棋盘交互 / FEN / 棋谱回放   数字人适配层(XmovAvatar litesdk)│
+│  语音识别(Web Speech) / 状态栏 / 画像与记忆面板              │
+└───────────────┬──────────────────────────────────────────┘
+                │ REST /api/* + WS /ws/game/{id}（avatar 状态广播）
+┌───────────────▼──────────────────────────────────────────┐
+│ 后端（FastAPI）                                             │
+│  routes: 对局/落子/悔棋/和棋/认输/棋谱/画像/聊天/模型管理      │
+│  言语触发决策 → LLM(人格台词) → 具身指令分发器(状态机/队列)    │
+│  主动叙事驱动(章节式故事线)    动态胜率控制(auto 难度调节)     │
+│  分层记忆: 会话 + mem0/降级SQLite + SQLite 画像              │
+└──────┬──────────────────────┬─────────────────────────────┘
+       │ subprocess(node)     │ websockets / sqlite
+┌──────▼──────────┐   ┌───────▼───────────────────────────┐
+│ engine_host.js  │   │ 魔珐星云 XmovAvatar WebSocket       │
+│ + logic.js(引擎) │   │ (TTS/口型/情绪/动作/打断)            │
+└─────────────────┘   └───────────────────────────────────┘
+</pre>
+<p><b>关键技术点：</b>引擎经 <code>engine_host.js</code>（Node stdin/stdout JSON 宿主）调用 vendored <code>logic.js</code>，FEN 对接，Docker 构建离线可复现；具身指令分发器：IDLE/THINKING/SPEAKING 状态机 + 表演队列 + 语音打断 + WS 广播；用户画像 SQLite diff 更新，跨局累加（娱乐陪伴参考，非医疗诊断）。</p>
+
+<h2 class="pagebreak">四、快速上手</h2>
+<h3>4.1 本地开发模式</h3>
+<pre><code>cd os2026_chess_friend
+cp .env.example .env            # 填 LLM 密钥；数字人密钥可留空（自动降级）
+pip install -r requirements.txt # （可选）pip install -r requirements-memory.txt 启用 mem0
+uvicorn backend.app.main:app --host 127.0.0.1 --port 8010
+# 浏览器打开 http://127.0.0.1:8010</code></pre>
+<p>要求：Python 3.10+、Node.js（引擎）。无 LLM 密钥/数字人密钥时自动降级（mock 台词 / Web Speech 朗读 / 纯文字），可完整演示对局与叙事。</p>
+<h3>4.2 Docker 一键部署（可复现）</h3>
+<pre><code>cp .env.example .env
+docker compose up -d --build
+# 访问 http://localhost:8000</code></pre>
+<ul>
+  <li>镜像内已装 Node.js 引擎运行时，并拷贝 backend/frontend/vendor 三件套（离线可复现）；</li>
+  <li>数据卷 <code>./data:/app/data</code> 持久化画像/棋谱/记忆；</li>
+  <li>国内构建加速：<code>.env</code> 配 <code>PIP_INDEX_URL</code>（compose build 自动透传）。</li>
+</ul>
+<h3>4.3 真机数字人</h3>
+<p>在可联网的真机浏览器打开页面（需 WebGL2），加载魔珐星云 litesdk 后渲染 3D 数字人；<code>ENABLE_DIGITAL_HUMAN=false</code> 可整体关闭数字人只留对局/对话。</p>
+
+<h2>五、质量保障</h2>
+<table>
+  <tr><th style="width:26%">项</th><th>结果</th></tr>
+  <tr><td>pytest 单测</td><td><b>119 项全过</b>（×4 连跑稳定），覆盖引擎合法性/胜负判定/动态难度/叙事推进/语音回声/结局必开口/画像跨局续讲</td></tr>
+  <tr><td>CDP 前端 E2E</td><td><b>11/11 通过</b>（真实浏览器自动化：登录→开局→落子→叙事播报→绝杀判赢渲染→人格名回归），同时校验"后端为新代码"抓旧后端回归</td></tr>
+  <tr><td>一键自检 <code>python scripts/self_check.py</code></td><td><b>9/9 通过</b>（personas 结构/叙事推进/引擎含目标胜率/开局应着/后端健康/前端关键元素/数据库回环）</td></tr>
+  <tr><td>提交纪律</td><td>主干 8 个提交全部推送 origin/main，工作区干净</td></tr>
+</table>
+
+<h2>六、真人感打磨历程（6 轮）</h2>
+<ol>
+  <li><b>第一轮</b>：悔棋/棋谱库/人格切换/送吃保护/三结局兜底/AI 思考"让我想想…"；</li>
+  <li><b>第二轮（交互大改造）</b>：言语触发决策（开口频率真人化）、数字人队列调度与情绪超时、引擎走法多样性、输入过滤、闲聊三档、轻量人格、主动叙事框架、双凭证小雅；</li>
+  <li><b>第三轮（真人感收尾）</b>：绝杀判赢修复 + 全链路单测、说话频率下调、主动叙事台词真正播报 + 两位棋友人格故事落地、去"你/您"句式；</li>
+  <li><b>第四轮</b>：开局棋谱坐标修正（顺手炮/屏风马/跳边马）+ 棋谱限前 5 手、录音尾音双保险、结局必开口（"你赢了"必说）、故事口语化改写 + 事件匹配 + 情绪多样化 + 会话内去重；</li>
+  <li><b>第五轮</b>：动态胜率控制（auto 档 EMA 动态难度 + 引擎目标胜率选着，稳定 ~50% 势均力敌）、章节式连续叙事（4 段主线 + 跨局续讲存画像）；</li>
+  <li><b>第六轮</b>：故事台词防重复（事件命中"正在讲则继续" + 最近窗口去重）、状态栏人格名非硬编码、一键自检脚本。</li>
+</ol>
+<p>每轮均由真实使用反馈驱动（"感觉好弱""老张在思考""台词重复两遍" → 对应修复）。</p>
+
+<h2 class="pagebreak">七、演示剧本（5 分钟）</h2>
+<ol>
+  <li>登录（老账号/新账号）→ 主界面；</li>
+  <li>选小雅 + auto 棋力 → 开始对局：数字人开口问候；</li>
+  <li>落子：AI 先"琢磨"再应手，状态栏"小雅想想怎么走"；连续几局观察胜率维持在 ~50%（动态难度 + 目标胜率选着）；</li>
+  <li>语音：点麦克风说话 → 数字人高优先级插播回复（barge-in）；</li>
+  <li>静默 1 分钟左右：数字人主动讲章节故事线（源头→发展→高潮→收尾），开新局接着讲（跨局续讲）；</li>
+  <li>将死 AI：绝杀判赢 + 数字人必说"你赢了"收尾；</li>
+  <li>棋谱管理：回放整局（逐手 + 事件 + 高亮）。</li>
+</ol>
+
+<h2>八、部署与可复现说明</h2>
+<ul>
+  <li><b>配置</b>：全部经 <code>.env</code>（参照 <code>.env.example</code>）；LLM 走 OpenAI 兼容协议可换任意厂商；数字人双凭证按人格分叉；</li>
+  <li><b>数据</b>：SQLite 画像/棋谱 + 长期记忆全部本地落盘（<code>data/</code>），不向第三方上传；</li>
+  <li><b>降级开关</b>：<code>LLM_API_KEY=""</code>→mock 台词；<code>ENABLE_DIGITAL_HUMAN=false</code>→无 3D 数字人；无 mem0→SQLite 子串召回；<code>ENGINE_DIVERSITY=0</code>→纯引擎确定性；</li>
+  <li><b>引擎归属</b>：vendored <code>logic.js</code> 原样内置未修改（MIT，含 NOTICE），仅自研粘合层对接；</li>
+  <li><b>本机验证说明</b>：本交付文档在无 Docker 环境编写，Dockerfile/compose 已按"容器内 node + frontend + vendor 三件套 + 数据卷 + 加速透传"核对；如有 Docker 环境请按 4.2 实跑一次。</li>
+</ul>
+
+<h2>九、已知边界与免责</h2>
+<ul>
+  <li>真机 3D 数字人渲染依赖 WebGL2 与魔珐星云 SDK 网络加载，离线/低版本浏览器自动降级为 Web Speech 朗读 + 文字气泡；</li>
+  <li>用户画像仅基于下棋行为偏好统计，<b>不属医疗/心理诊断</b>，不采集真实身份信息；</li>
+  <li>LLM 台词为生成内容，人格故事为《棋王》《后翼弃兵》的<b>二次改编创作</b>（非原作文本），已在 README 注明出处。</li>
+</ul>
+
+<h2>十、许可证与归属</h2>
+<ul>
+  <li>自研代码：MIT（见 LICENSE）；</li>
+  <li>复用组件按其各自协议（FastAPI/uvicorn/pydantic/openai/httpx/websockets 等，详见 README「许可证」表）；</li>
+  <li>vendored <code>logic.js</code>：MIT（ryoi/xiangqi），原样内置未修改。</li>
+</ul>
+
+<div class="footer">OS2026 开源大赛参赛作品 · 适老化数字人中国象棋棋友 · 交付文档 v1.0</div>
+
+</body>
+</html>
