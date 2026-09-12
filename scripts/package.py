@@ -10,11 +10,13 @@
     dist/os2026_chess_friend_v<版本>.manifest.txt # 内容清单（文件+字节数）
 
 版本号：从 git 自动取（最近提交数 + 短哈希），如 v1.0.0+b7.8ca2f47。
+
+附带文件（EXTRA_FILES，在仓库外、不进 git）：演示视频等大文件随交付包分发，
+zip 内路径为 os2026_chess_friend/demo/demo.mp4；已压缩格式用 ZIP_STORED 不重复压缩。
 """
 from __future__ import annotations
 
 import hashlib
-import os
 import subprocess
 import sys
 import zipfile
@@ -28,12 +30,11 @@ if hasattr(sys.stdout, "reconfigure"):
     except Exception:  # noqa: BLE001
         pass
 
-# 打包内容：目录/文件（相对仓库根）；黑名单用于排除目录内的杂物
+# 打包内容：目录/文件（相对仓库根）
 INCLUDE: list[str] = [
     "backend",
     "frontend",
     "scripts",
-    "vendor",
     "docs",
     "README.md",
     "LICENSE",
@@ -44,9 +45,16 @@ INCLUDE: list[str] = [
     "Dockerfile",
     "docker-compose.yml",
 ]
+
+# 附带文件：(源绝对路径, zip 内相对 arcname)；文件不存在时跳过并提示
+EXTRA_FILES: list[tuple[str, str]] = [
+    (r"D:\dsh\os2026\demo.mp4", "demo/demo.mp4"),  # 演示视频（5 分钟，原片）
+]
+
 EXCLUDE_DIR_NAMES = {".git", ".pytest_cache", "__pycache__", ".tmp_pytest_ws", "node_modules", "dist"}
 EXCLUDE_FILE_NAMES = {".env", "*.pyc", "*.db", "*.db-wal", "*.db-shm", "*.log"}
 ALWAYS_SKIP_REL = {".env"}
+STORED_SUFFIXES = {".mp4", ".mov", ".avi", ".mkv", ".zip", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".pdf"}
 
 
 def git_version() -> str:
@@ -62,33 +70,36 @@ def git_version() -> str:
         return "v1.0.0"
 
 
-def collect() -> list[Path]:
-    files: list[Path] = []
-    for rel in INCLUDE:
-        p = ROOT / rel
-        if p.is_file():
-            files.append(p)
-        elif p.is_dir():
-            for f in sorted(p.rglob("*")):
-                if f.is_file() and not _skip(f):
-                    files.append(f)
-    return files
-
-
 def _skip(f: Path) -> bool:
     parts = f.relative_to(ROOT).parts
     if parts[0] in ALWAYS_SKIP_REL:
         return True
     for part in parts:
-        if part in EXCLUDE_DIR_NAMES:
-            return True
-        if part in EXCLUDE_FILE_NAMES:
+        if part in EXCLUDE_DIR_NAMES or part in EXCLUDE_FILE_NAMES:
             return True
     if f.suffix in (".pyc", ".log"):
         return True
-    if f.name in (".env",):
-        return True
     return False
+
+
+def collect_entries() -> list[tuple[Path, str]]:
+    """返回 (源文件, zip 内 arcname) 列表。"""
+    entries: list[tuple[Path, str]] = []
+    for rel in INCLUDE:
+        p = ROOT / rel
+        if p.is_file():
+            entries.append((p, rel))
+        elif p.is_dir():
+            for f in sorted(p.rglob("*")):
+                if f.is_file() and not _skip(f):
+                    entries.append((f, f.relative_to(ROOT).as_posix()))
+    for src, arc in EXTRA_FILES:
+        sp = Path(src)
+        if sp.is_file():
+            entries.append((sp, arc))
+        else:
+            print(f"[warn] 附带文件不存在，跳过：{src}")
+    return entries
 
 
 def sha256_of(p: Path) -> str:
@@ -104,15 +115,14 @@ def main() -> None:
     ver = git_version()
     dist = ROOT / "dist"
     dist.mkdir(exist_ok=True)
-    files = collect()
-    if not files:
-        print("没有可打包内容，检查 INCLUDE 配置")
+    entries = collect_entries()
+    if not entries:
+        print("没有可打包内容，检查 INCLUDE / EXTRA_FILES 配置")
         sys.exit(1)
 
     manifest: list[tuple[str, int, str]] = []
-    for f in files:
-        rel = f.relative_to(ROOT).as_posix()
-        manifest.append((rel, f.stat().st_size, sha256_of(f)))
+    for f, arc in entries:
+        manifest.append((arc, f.stat().st_size, sha256_of(f)))
 
     total = sum(s for _, s, _ in manifest)
     print(f"== 打包清单（{len(manifest)} 文件，{total / 1024 / 1024:.1f} MB）版本 {ver} ==")
@@ -124,8 +134,10 @@ def main() -> None:
 
     zip_path = dist / f"os2026_chess_friend_{ver}.zip"
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
-        for rel, _, _ in sorted(manifest):
-            z.write(ROOT / rel, arcname=f"os2026_chess_friend/{rel}")
+        for arc, _, _ in sorted(manifest):
+            src = next(f for f, a in entries if a == arc)
+            method = zipfile.ZIP_STORED if Path(arc).suffix.lower() in STORED_SUFFIXES else zipfile.ZIP_DEFLATED
+            z.write(src, arcname=f"os2026_chess_friend/{arc}", compress_type=method)
 
     sums_path = dist / f"os2026_chess_friend_{ver}.SHA256SUMS"
     sums_path.write_text("".join(f"{h}  os2026_chess_friend/{rel}\n" for rel, _, h in sorted(manifest)), encoding="utf-8")

@@ -180,7 +180,7 @@ docker compose up -d --build
 python scripts/package.py         # 产出 dist/os2026_chess_friend_v<版本>.zip + SHA256SUMS + manifest
 ```
 
-> 交付包自动排除 `.git/.env/data/临时目录`；交付文档见 [docs/DELIVERY.md](docs/DELIVERY.md)（同内容 PDF：`docs/DELIVERY.pdf`，HTML 源可再打印）。
+> 交付包自动排除 `.git/.env/data/临时目录`，并附带 5 分钟演示视频 `demo/demo.mp4`（原片，约 268MB，不进 git）；交付文档见 [docs/DELIVERY.md](docs/DELIVERY.md)（同内容 PDF：`docs/DELIVERY.pdf`，HTML 源可再打印）。
 
 ## 环境变量配置
 
