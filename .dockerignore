@@ -1,0 +1,23 @@
+# ---- 密钥与数据：绝不进构建上下文 ----
+.env
+.env.*
+!.env.example
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# ---- 版本库与临时物 ----
+.git
+.gitignore
+dist/
+build/
+__pycache__/
+*.pyc
+.pytest_cache/
+.tmp_pytest_ws/
+.tmp_*/
+.pt/
+.pt3root/
+node_modules/
+*.log

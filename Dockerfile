@@ -15,10 +15,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends nodejs \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt ${PIP_INDEX_URL:+--index-url "$PIP_INDEX_URL"}
 
-# 应用本体：后端（FastAPI）+ 前端（同源 serve）+ vendored 引擎（离线可复现）
+# 应用本体：后端（含 backend/vendor/xiangqi/logic.js 引擎）+ 前端（同源 serve）
 COPY backend ./backend
 COPY frontend ./frontend
-COPY vendor ./vendor
 
 EXPOSE 8000
 

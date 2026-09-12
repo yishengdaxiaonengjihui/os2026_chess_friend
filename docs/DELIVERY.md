@@ -76,7 +76,7 @@ uvicorn backend.app.main:app --host 127.0.0.1 --port 8010
 ```bash
 cp .env.example .env
 docker compose up -d --build
-# 访问 http://localhost:8000
+# 访问 http://localhost:8010（宿主端口 8010 = 容器内 8000，与本地开发一致）
 ```
 
 - 镜像内已装 Node.js 引擎运行时，并拷贝 backend/frontend/vendor 三件套（离线可复现）；
@@ -123,7 +123,7 @@ docker compose up -d --build
 - **数据**：SQLite 画像/棋谱 + 长期记忆全部本地落盘（`data/`），不向第三方上传；
 - **降级开关**：`LLM_API_KEY=""`→mock 台词；`ENABLE_DIGITAL_HUMAN=false`→无 3D 数字人；无 mem0→SQLite 子串召回；`ENGINE_DIVERSITY=0`→纯引擎确定性；
 - **引擎归属**：vendored `logic.js` 原样内置未修改（MIT，含 NOTICE），仅自研粘合层对接；
-- **本机验证说明**：本交付文档在无 Docker 环境编写，Dockerfile/compose 已按"容器内 node + frontend + vendor 三件套 + 数据卷 + 加速透传"核对；如有 Docker 环境请按 4.2 实跑一次。
+- **Docker 实跑验证**（WSL Ubuntu，docker 29.7.2 + compose v5.5.0）：`docker compose up -d --build` 构建成功（基础镜像装 Node.js 引擎运行时 + pip 依赖；实测本机 pypi.org 不通，经 `.env` 配 `PIP_INDEX_URL=清华镜像` 透传后构建通过）；启动后健康检查 ok、前端页面 200、引擎走棋正常（AI 应手 + 新 FEN）、数据卷 `./data` 持久化画像/棋谱、`LLM_API_KEY`/`ENABLE_DIGITAL_HUMAN` 等 env 注入生效；宿主端口 8010（避开常见 8000 占用）。
 
 ## 九、已知边界与免责
 

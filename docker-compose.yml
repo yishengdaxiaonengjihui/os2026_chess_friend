@@ -9,7 +9,7 @@ services:
         PIP_INDEX_URL: ${PIP_INDEX_URL:-}   # 国内构建加速（可选，来自 .env）
     container_name: chess-friend-backend
     ports:
-      - "8000:8000"
+      - "8010:8000"   # 宿主 8010（与本地开发端口一致；容器内 8000）
     env_file:
       - .env
     volumes:
