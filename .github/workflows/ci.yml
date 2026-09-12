@@ -22,7 +22,7 @@ jobs:
           node-version: "20"
 
       - name: 安装依赖
-        run: pip install -r requirements.txt
+        run: pip install -r requirements.txt pytest
 
       - name: 准备测试数据目录
         run: mkdir -p data
